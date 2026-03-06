@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Literal, Dict, Any, Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal, Dict, Any, Optional, List
 
 class GuardDutyResource(BaseModel):
     instance_id: Optional[str] = None
@@ -7,6 +7,8 @@ class GuardDutyResource(BaseModel):
     user_name: Optional[str] = None
 
 class GuardDutyDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     schemaVersion: str
     accountId: str
     region: str
@@ -20,14 +22,15 @@ class GuardDutyDetail(BaseModel):
     updatedAt: str
     title: str
     description: str
-    resource: Dict[str, Any]
+    resource: Optional[Dict[str, Any]] = None
+    resources: Optional[List[Dict[str, Any]]] = None
 
 class GuardDutyEvent(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
     
     version: str
     id: str
-    detail_type: Literal["GuardDuty Finding"]
+    detail_type: Literal["GuardDuty Finding"] = Field(alias="detail-type")
     source: Literal["aws.guardduty"]
     account: str
     time: str
