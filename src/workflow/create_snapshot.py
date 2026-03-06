@@ -6,7 +6,7 @@ Creates EBS snapshots for forensic analysis
 import json
 import os
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 def lambda_handler(event, context):

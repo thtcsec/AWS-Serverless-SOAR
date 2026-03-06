@@ -1,3 +1,4 @@
+import botocore
 """
 Enterprise SOAR - Instance Termination Lambda
 Terminates compromised instances after human approval
@@ -6,7 +7,7 @@ Terminates compromised instances after human approval
 import json
 import os
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 def lambda_handler(event, context):
@@ -46,7 +47,7 @@ def lambda_handler(event, context):
                 }
                 return event
                 
-        except ec2.exceptions.ClientError as e:
+        except botocore.exceptions.ClientError as e:
             if 'InvalidInstanceID.NotFound' in str(e):
                 print(f"Instance {instance_id} no longer exists")
                 event['termination_result'] = {
@@ -122,7 +123,7 @@ def verify_instance_termination(ec2_client, instance_id, max_attempts=6):
                 print(f"Unexpected instance state: {state}")
                 return False
                 
-        except ec2.exceptions.ClientError as e:
+        except botocore.exceptions.ClientError as e:
             if 'InvalidInstanceID.NotFound' in str(e):
                 print(f"Instance {instance_id} no longer exists")
                 return True

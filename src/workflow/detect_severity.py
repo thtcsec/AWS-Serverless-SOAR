@@ -6,7 +6,7 @@ Analyzes GuardDuty findings to determine incident severity
 import json
 import os
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 
 def lambda_handler(event, context):
     """

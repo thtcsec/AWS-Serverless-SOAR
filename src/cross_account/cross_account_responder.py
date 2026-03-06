@@ -7,7 +7,7 @@ import json
 import os
 import boto3
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
 # Configure logging

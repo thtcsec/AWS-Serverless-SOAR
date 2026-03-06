@@ -6,7 +6,8 @@ Processes SQS messages and triggers Step Functions workflows
 import json
 import os
 import boto3
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone, timezone
 import logging
 
 # Configure logging

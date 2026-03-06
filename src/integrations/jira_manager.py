@@ -8,7 +8,7 @@ import os
 import boto3
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from requests.auth import HTTPBasicAuth
 
