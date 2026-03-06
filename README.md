@@ -1,49 +1,16 @@
-# AWS Serverless Security Orchestration, Automation, and Response (SOAR)
+# 🚀 AWS Serverless Security Orchestration, Automation, and Response (SOAR)
 
-This project demonstrates a fully automated Serverless Incident Response architecture on AWS. It detects malicious activity using Amazon GuardDuty and automatically isolates the compromised EC2 instance while preserving its state for forensic investigation.
+![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white) 
+![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Serverless](https://img.shields.io/badge/serverless-%23FD5750.svg?style=for-the-badge&logo=serverless&logoColor=white)
+
+This project demonstrates a fully automated, enterprise-grade Serverless Incident Response architecture on AWS. It detects malicious activity using Amazon GuardDuty and CloudTrail, and automatically isolates compromised resources while preserving state for forensic investigation.
 
 ## 🏛️ Architecture
 
-```mermaid
-graph TD
-  A[Attacker] -->|Compromises| B(EC2 Target)
-  A -->|Data Exfiltration| C[S3 Bucket]
-  A -->|IAM Compromise| D[IAM User]
-  
-  B -->|C&C / Crypto Mining| E{Amazon GuardDuty}
-  C -->|Unusual Access| F{CloudTrail}
-  D -->|Suspicious Activity| F
-  
-  E -->|High Severity Finding| G[Amazon EventBridge]
-  F -->|IAM/S3 Events| G
-  
-  G -->|Triggers Rule| H((AWS Lambda - EC2 Response))
-  G -->|Triggers Rule| I((AWS Lambda - S3 Response))
-  G -->|Triggers Rule| J((AWS Lambda - IAM Response))
-  
-  H -->|1. Isolate SG| B
-  H -->|2. Enforce IMDSv2| B
-  H -->|3. Detach IAM Role| B
-  H -->|4. Revoke Sessions| B
-  H -->|5. Take Snapshot| K[(EBS Snapshot)]
-  H -->|6. Stop Instance| B
-  
-  I -->|1. Block Access| C
-  I -->|2. Enable MFA Delete| C
-  I -->|3. Object Lock| C
-  I -->|4. Forensic Snapshot| L[(Bucket Metadata)]
-  
-  J -->|1. Disable Keys| D
-  J -->|2. Remove Groups| D
-  J -->|3. Enforce MFA| D
-  J -->|4. Investigation| M[Audit Logs]
-  
-  H -->|7. Send Alert| N[Amazon SNS]
-  I -->|5. Send Alert| N
-  J -->|5. Send Alert| N
-  
-  N -->|"Email / SMS"| O[Security Admin]
-```
+![Architecture Diagram](./images/aws_soar.png)
+
 
 The workflow involves:
 1. **Detection:** Amazon GuardDuty detects anomalous behavior with severity >= 7.0 (e.g., EC2 communicating with a known C&C server).
