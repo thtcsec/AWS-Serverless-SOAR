@@ -227,9 +227,19 @@ To deploy the additional security playbooks:
 | IAM Compromise | CloudTrail | < 45 seconds | Disable Keys, Remove Roles |
 | EC2 C&C Activity | GuardDuty | < 30 seconds | Isolate, Revoke Sessions |
 
+## ⚡ Scaling & Reliability
+- Lambda scales automatically on EventBridge volume; tune with Terraform variables for memory, timeout, and reserved concurrency.
+- Reserved concurrency can cap burst traffic to protect downstream APIs, or left unset for default scaling.
+- Increase timeout/memory for larger forensic snapshots or heavy CloudTrail lookups.
+
 ## �🔧 Configuration Options
 
 ### Environment Variables
 - `EXFILTRATION_THRESHOLD`: S3 download size threshold (default: 10GB)
 - `SNS_TOPIC_ARN`: Alert notification topic
 - `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 7)
+
+### Terraform Variables
+- `lambda_memory_size`: Memory size for all SOAR Lambda functions
+- `lambda_timeout`: Timeout in seconds for all SOAR Lambda functions
+- `lambda_reserved_concurrency`: Reserved concurrency for all SOAR Lambda functions
