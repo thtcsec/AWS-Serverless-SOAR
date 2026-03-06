@@ -5,69 +5,53 @@
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Serverless](https://img.shields.io/badge/serverless-%23FD5750.svg?style=for-the-badge&logo=serverless&logoColor=white)
 
-This project demonstrates a fully automated, enterprise-grade Serverless Incident Response architecture on AWS. It detects malicious activity using Amazon GuardDuty and CloudTrail, and automatically isolates compromised resources while preserving state for forensic investigation.
+Automated security incident response platform that detects threats and automatically isolates compromised resources while preserving forensic evidence.
 
-## 🏛️ Architecture
+## �️ Architecture Overview
 
-### 🖼️ High-Level Architecture
-![Architecture Diagram](images/aws_soar.png)
-
-### ⚙️ Logical Data Flow (Mermaid)
-```mermaid
-graph TD
-  A[Attacker] -->|Compromises| B(EC2 Target)
-  A -->|Data Exfiltration| C[S3 Bucket]
-  A -->|IAM Compromise| D[IAM User]
-  
-  B -->|C&C / Crypto Mining| E{Amazon GuardDuty}
-  C -->|Unusual Access| F{CloudTrail}
-  D -->|Suspicious Activity| F
-  
-  E -->|High Severity Finding| G[Amazon EventBridge]
-  F -->|IAM/S3 Events| G
-  
-  G -->|Triggers Rule| H((AWS Lambda - EC2 Response))
-  G -->|Triggers Rule| I((AWS Lambda - S3 Response))
-  G -->|Triggers Rule| J((AWS Lambda - IAM Response))
-  
-  H -->|1. Isolate SG| B
-  H -->|2. Enforce IMDSv2| B
-  H -->|3. Detach IAM Role| B
-  H -->|4. Revoke Sessions| B
-  H -->|5. Take Snapshot| K[(EBS Snapshot)]
-  H -->|6. Stop Instance| B
-  
-  I -->|1. Block Access| C
-  I -->|2. Enable MFA Delete| C
-  I -->|3. Object Lock| C
-  I -->|4. Forensic Snapshot| L[(Bucket Metadata)]
-  
-  J -->|1. Disable Keys| D
-  J -->|2. Remove Groups| D
-  J -->|3. Enforce MFA| D
-  J -->|4. Investigation| M[Audit Logs]
-  
-  H -->|7. Send Alert| N[Amazon SNS]
-  I -->|5. Send Alert| N
-  J -->|5. Send Alert| N
-  
-  N -->|"Email / SMS"| O[Security Admin]
+### System Architecture
+```
+Threat Detection → Event Router → Message Queue → Workflow Engine → Workers
+     ↓                    ↓              ↓              ↓           ↓
+GuardDuty/SCC → EventBridge/Eventarc → SQS/PubSub → Step Functions/Cloud Workflows → Container Workers
 ```
 
+### AWS Architecture Flow
+```mermaid
+flowchart TD
+    subgraph "Detection Layer"
+        A[GuardDuty] --> D[EventBridge]
+        B[CloudTrail] --> D
+        C[SCC] --> E[Pub/Sub]
+    end
+    
+    subgraph "Processing Layer"
+        D --> F[Step Functions]
+        E --> G[Cloud Workflows]
+    end
+    
+    subgraph "Response Layer"
+        F --> H[Isolation Workers]
+        F --> I[Forensics Workers]
+        G --> J[Isolation Workers]
+        G --> K[Forensics Workers]
+    end
+    
+    subgraph "Notification Layer"
+        H --> L[Slack/Jira/SIEM]
+        I --> L
+        J --> L
+        K --> L
+    end
+```
 
-The workflow involves:
-1. **Detection:** Amazon GuardDuty detects anomalous behavior with severity >= 7.0 (e.g., EC2 communicating with a known C&C server).
-2. **Event Routing:** Amazon EventBridge intercepts the GuardDuty finding based on an event rule.
-3. **Automation Logic:** An AWS Lambda function (Python/Boto3) is triggered.
-4. **Resolution (Response Playbook):** 
-   - **Isolate:** Modifies the EC2 instance Security Group to an `Isolation SG` (0 ingress/egress).
-   - **IMDSv2 Enforce:** Enforces IMDSv2 to prevent further SSRF-based metadata and credential theft.
-   - **Revoke:** Disassociates any attached IAM Instance Profiles.
-   - **Kill Sessions:** Attaches an inline `Deny All` IAM policy with a `aws:TokenIssueTime` condition to immediately revoke any cached local credentials the hacker might be using.
-   - **Preserve:** Takes an EBS Snapshot of the compromised instance for forensics.
-   - **Tag:** Tags the instance as `Compromised: True`.
-   - **Stop:** Halts the instance process completely.
-   - **Alert:** Sends an alert notification securely via Amazon SNS.
+### Workflow Process
+1. **Detection:** GuardDuty detects threats (severity >= 7.0)
+2. **Event Routing:** EventBridge routes to SQS queue
+3. **Workflow Engine:** Step Functions orchestrates response
+4. **Container Workers:** ECS Fargate performs long-running operations
+5. **Human Approval:** Manual approval for critical actions
+6. **Integrations:** Slack, Jira, SIEM notifications
 
 ## 🕵️ Threat Scenario
 
@@ -106,140 +90,94 @@ The workflow involves:
    ```
 3. **Important:** After the first apply, check the email address you provided. AWS SNS requires you to click a confirmation link to subscribe to the security alerts.
 
-## ⚔️ Simulation Guide: Triggering GuardDuty
-Amazon GuardDuty costs money and takes time to learn behavior. To immediately see this SOAR architecture in action without waiting for real hackers, we can generate sample findings.
+## 🛡️ Advanced Features
 
-**Method 1: Using AWS CLI (Easiest)**
-Generate sample GuardDuty findings that EventBridge will catch:
+### Workflow Engine (Step Functions)
+- **Human approval** workflows for critical actions
+- **Multi-step incident response** with retry logic
+- **Parallel execution** for isolation and forensics
+- **Error handling** and dead letter queue processing
 
-```bash
-# 1. Get your Detector ID (Terraform output)
-aws guardduty list-detectors
+### Message Queue Layer (SQS)
+- **Buffer layer** prevents system overload during attacks
+- **Dead Letter Queue** handles failed processing
+- **Batch processing** for improved performance
+- **Cross-account message routing**
 
-# 2. Ask GuardDuty to generate a sample finding for your EC2
-aws guardduty create-sample-findings \
-  --detector-id <YOUR_DETECTOR_ID> \
-  --finding-types "Backdoor:EC2/C&CActivity.B"
+### Container Workers (ECS Fargate)
+- **Long-running operations** (15+ minute forensic scans)
+- **Full environment** access for comprehensive analysis
+- **Scalable compute** with auto-scaling
+- **Health monitoring** and graceful degradation
+
+### Multi-Account Security
+- **Centralized security account** with cross-account roles
+- **GuardDuty master/member** configuration
+- **Cross-account incident response** capabilities
+- **Secure role assumption** with external IDs
+
+### Integrations
+- **Slack/Teams** for real-time notifications
+- **Jira/ServiceNow** for ticket management
+- **SIEM integration** (Splunk, Chronicle, Elastic)
+- **Threat intelligence** feeds
+
+## 🚀 Deployment
+
+### Environment Structure
 ```
-*Note: Depending on how AWS generates the sample, the sample finding might use a fake Instance ID rather than your actual deployed EC2. But you will still see the Lambda execution trigger in CloudWatch logs.*
+terraform/
+├── modules/                    # Reusable modules
+│   ├── network/               # VPC, subnets, security groups
+│   ├── soar/                  # Core SOAR infrastructure
+│   ├── events/                # EventBridge and routing
+│   ├── security/              # Multi-account security
+│   └── integrations/          # Slack, Jira, SIEM
+├── environments/               # Environment-specific configs
+│   ├── dev/                   # Development environment
+│   ├── staging/               # Staging environment
+│   └── prod/                  # Production environment
+└── global/                    # Global resources and state
+```
 
-**Method 2: Use Attack Simulation Scripts (Realistic)**
-Use the provided bash scripts to generate real network traffic patterns that GuardDuty flags as malicious.
+### Quick Deploy
+```bash
+# Deploy SOAR platform
+cd aws-serverless-soar
+./scripts/deploy.sh prod
 
-1. SSH into the `target_ec2_public_ip` (provided in Terraform outputs).
-2. Upload and run the scripts in `attack_simulation/`:
-   ```bash
-   # Run the fake crypto miner
-   chmod +x attack_simulation/crypto_miner.sh
-   ./attack_simulation/crypto_miner.sh
-   ```
-3. **Wait:** GuardDuty typically takes 15-20 minutes to generate and propagate an actual finding for continuous traffic. 
-4. **Observe:** Check your email. The SOAR logic will fire, taking an EBS Snapshot, detaching its IAM roles, and destroying your SSH connection (by swapping the Security Group).
+# Configure integrations
+aws ssm put-parameter \
+  --name "/soar/slack/webhook_url" \
+  --value "${SLACK_WEBHOOK_URL}" \
+  --type "SecureString"
+```
 
-## 🛡️ Additional Security Playbooks
+## 📊 Security Coverage
 
-### 1. S3 Data Exfiltration Detection & Response
-**Detection:** Monitors CloudTrail logs for unusual S3 access patterns including:
-- Large volume downloads (>10GB threshold)
-- High frequency access (>1000 operations/24hrs)
-- Multiple source IPs
-- Off-hours access patterns
+| Threat Type | Detection | Response Time | Advanced Features |
+|-------------|-----------|---------------|-------------------|
+| EC2 Compromise | GuardDuty | < 30s | Workflow approval, container forensics |
+| S3 Exfiltration | CloudTrail | < 60s | Cross-account response, SIEM integration |
+| IAM Compromise | CloudTrail | < 45s | Multi-project security, ticketing |
+| DDoS Attacks | VPC Flow Logs | < 15s | Queue buffering, auto-scaling |
 
-**Response Actions:**
-- Block user access via bucket policies
-- Enable S3 protection features (MFA Delete, Object Lock)
-- Create forensic snapshots of bucket metadata
-- Send security alerts with detailed analysis
+## 🔧 Configuration
 
-**Trigger:** CloudTrail events for S3 `GetObject`, `ListObjects`, `DownloadFile` operations
+### Variables
+- `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
+- `approval_wait_time`: Human approval timeout (prod: 3600s, dev: 300s)
+- `enable_multi_account`: Cross-account security (default: true)
+- `enable_integrations`: Slack/Jira/SIEM (default: true)
 
-### 2. IAM Compromise Detection & Response
-**Detection:** Analyzes IAM audit events for suspicious activities:
-- Privilege escalation attempts
-- Unusual source IPs
-- Failed login patterns
-- Concurrent sessions from different locations
-- Suspicious timing (off-hours changes)
+### Integration Setup
+```bash
+# Slack integration
+aws ssm put-parameter --name "/soar/slack/webhook_url" --value "URL" --type "SecureString"
 
-**Response Actions:**
-- Disable compromised user access keys
-- Remove from privileged IAM groups
-- Enforce MFA requirements
-- Conduct comprehensive investigation
-- Send detailed security alerts
+# Jira integration  
+aws ssm put-parameter --name "/soar/jira/api_token" --value "TOKEN" --type "SecureString"
 
-**Trigger:** CloudTrail events for IAM operations (CreateUser, AttachPolicy, etc.)
-
-## 🎯 Deployment for New Playbooks
-
-To deploy the additional security playbooks:
-
-1. **S3 Exfiltration Response:**
-   ```bash
-   # Deploy Lambda function
-   aws lambda create-function \
-     --function-name s3-exfiltration-response \
-     --runtime python3.9 \
-     --role <your-lambda-execution-role> \
-     --handler s3_exfiltration_response.lambda_handler \
-     --zip-file fileb://s3_exfiltration_response.zip \
-     --environment Variables='{SNS_TOPIC_arn=<your-sns-topic>,EXFILTRATION_THRESHOLD=10737418240}'
-   
-   # Create EventBridge rule for S3 events
-   aws events put-rule \
-     --name s3-exfiltration-detection \
-     --event-pattern '{"source":["aws.s3"],"detail-type":["AWS API Call via CloudTrail"],"detail":{"eventSource":["s3.amazonaws.com"],"eventName":["GetObject","ListObjects"]}}'
-   
-   # Add Lambda target
-   aws events put-targets \
-     --rule s3-exfiltration-detection \
-     --targets '{"Id": "1","Arn": "<your-lambda-arn>"}'
-   ```
-
-2. **IAM Compromise Response:**
-   ```bash
-   # Deploy Lambda function
-   aws lambda create-function \
-     --function-name iam-compromise-response \
-     --runtime python3.9 \
-     --role <your-lambda-execution-role> \
-     --handler iam_compromise_response.lambda_handler \
-     --zip-file fileb://iam_compromise_response.zip \
-     --environment Variables='{SNS_TOPIC_arn=<your-sns-topic>}'
-   
-   # Create EventBridge rule for IAM events
-   aws events put-rule \
-     --name iam-compromise-detection \
-     --event-pattern '{"source":["aws.iam"],"detail-type":["AWS API Call via CloudTrail"]}'
-   
-   # Add Lambda target
-   aws events put-targets \
-     --rule iam-compromise-detection \
-     --targets '{"Id": "1","Arn": "<your-lambda-arn>"}'
-   ```
-
-## 📊 Security Coverage Matrix
-
-| Threat Type | Detection Source | Response Time | Automated Actions |
-|-------------|------------------|---------------|-------------------|
-| EC2 Crypto Mining | GuardDuty | < 30 seconds | Isolate, Snapshot, Stop |
-| S3 Data Exfiltration | CloudTrail | < 60 seconds | Block Access, Protect Bucket |
-| IAM Compromise | CloudTrail | < 45 seconds | Disable Keys, Remove Roles |
-| EC2 C&C Activity | GuardDuty | < 30 seconds | Isolate, Revoke Sessions |
-
-## ⚡ Scaling & Reliability
-- Lambda scales automatically on EventBridge volume; tune with Terraform variables for memory, timeout, and reserved concurrency.
-- Reserved concurrency can cap burst traffic to protect downstream APIs, or left unset for default scaling.
-- Increase timeout/memory for larger forensic snapshots or heavy CloudTrail lookups.
-
-## �🔧 Configuration Options
-
-### Environment Variables
-- `EXFILTRATION_THRESHOLD`: S3 download size threshold (default: 10GB)
-- `SNS_TOPIC_ARN`: Alert notification topic
-- `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 7)
-
-### Terraform Variables
-- `lambda_memory_size`: Memory size for all SOAR Lambda functions
-- `lambda_timeout`: Timeout in seconds for all SOAR Lambda functions
-- `lambda_reserved_concurrency`: Reserved concurrency for all SOAR Lambda functions
+# SIEM integration
+aws ssm put-parameter --name "/soar/siem/api_key" --value "KEY" --type "SecureString"
+```
