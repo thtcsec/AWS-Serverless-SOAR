@@ -16,32 +16,49 @@ Threat Detection → Event Router → Message Queue → Workflow Engine → Work
 GuardDuty/SCC → EventBridge/Eventarc → SQS/PubSub → Step Functions/Cloud Workflows → Container Workers
 ```
 
-### AWS Architecture Flow
+### Logical Data Flow
 ```mermaid
-flowchart TD
-    subgraph "Detection Layer"
-        A[GuardDuty] --> D[EventBridge]
-        B[CloudTrail] --> D
-        C[SCC] --> E[Pub/Sub]
+sequenceDiagram
+    participant Attacker
+    participant EC2 as AWS EC2
+    participant GD as GuardDuty
+    participant SQS as AWS SQS
+    participant SFN as Step Functions
+    participant ECS as Fargate Workers
+    participant Sec as Security Team
+
+    Attacker->>EC2: Exploits RCE vulnerability
+    Attacker->>EC2: Downloads Crypto Miner
+    EC2->>Internet: Makes unauthorized DNS queries (Mining Pool)
+    
+    rect rgb(255, 200, 200)
+        Note over GD,EC2: Detection Phase
+        GD->>EC2: Analyzes VPC Flow Logs & DNS
+        GD-->>SQS: Generates High Severity Finding (Score: 8.5)
     end
     
-    subgraph "Processing Layer"
-        D --> F[Step Functions]
-        E --> G[Cloud Workflows]
+    rect rgb(200, 220, 255)
+        Note over SQS,SFN: Orchestration Phase
+        SQS-->>SFN: Triggers Incident Response State Machine
+        SFN->>SFN: Validates Finding & Extracts Instance ID
     end
     
-    subgraph "Response Layer"
-        F --> H[Isolation Workers]
-        F --> I[Forensics Workers]
-        G --> J[Isolation Workers]
-        G --> K[Forensics Workers]
+    rect rgb(255, 230, 200)
+        Note over SFN,ECS: Automated Response Phase
+        SFN->>EC2: Modifies Security Group (Isolate)
+        SFN->>EC2: Enforces IMDSv2
+        SFN->>IAM: Detaches Instance Profile Roles
+        SFN->>IAM: Attaches Deny-All Session Policy
+        SFN->>EC2: Triggers EBS Volume Snapshot
+        SFN->>EC2: Executes stop_instances()
     end
     
-    subgraph "Notification Layer"
-        H --> L[Slack/Jira/SIEM]
-        I --> L
-        J --> L
-        K --> L
+    rect rgb(200, 255, 200)
+        Note over SFN,Sec: Forensic & Notification Phase
+        SFN->>ECS: Dispatches Forensics Worker Task
+        ECS->>ECS: Mounts Snapshot & Scans for Malware
+        ECS-->>SFN: Returns Forensic Report
+        SFN->>Sec: Sends Slack/Jira Alert with Report
     end
 ```
 
@@ -59,7 +76,41 @@ flowchart TD
 
 **Detection:** The malware begins making outbound DNS requests to known mining pools (e.g., `pool.minexmr.com`). GuardDuty analyzes the DNS logs and flags the instance with a *High-Severity* finding (`CryptoCurrency:EC2/BitcoinTool.B`).
 
-**Response:** Within seconds, the SOAR workflow executes. The instance is yanked off the network, its metadata endpoint is locked down, all active AWS privileges are explicitly revoked, its hard drive is snapshotted for the Blue Team, and the server shuts down.
+**Response Flow:**
+1. Within seconds, the SOAR workflow executes.
+2. The instance is yanked off the network.
+3. Its metadata endpoint is locked down. 
+4. All active AWS privileges are explicitly revoked.
+5. Its hard drive is snapshotted for the Blue Team.
+6. The server shutting down.
+
+### Timeline/Response Flow
+```mermaid
+gantt
+    title SOAR Incident Response Timeline
+    dateFormat  s
+    axisFormat  %S
+    
+    section Detection
+    GuardDuty Analyzes Logs     :a1, 0, 10s
+    EventBridge Routes Finding  :a2, after a1, 2s
+    
+    section Automated Response
+    SQS Buffers Message         :a3, after a2, 1s
+    SFN Validates Event         :a4, after a3, 2s
+    EC2 Network Isolation       :crit, a5, after a4, 3s
+    IAM Role Detachment         :crit, a6, after a5, 2s
+    IMDSv2 Enforcement          :a7, after a6, 2s
+    
+    section Forensics
+    EBS Volume Snapshotting     :a8, after a7, 15s
+    EC2 Instance Shutdown       :a9, after a8, 5s
+    Fargate Malware Scan        :a10, after a9, 45s
+    
+    section Notification
+    Compile Final Report        :a11, after a10, 2s
+    Dispatch Slack/Jira Alert   :a12, after a11, 1s
+```
 
 ## 🗂️ Project Structure
 - `src/`: Python code for the AWS Lambda responders.
