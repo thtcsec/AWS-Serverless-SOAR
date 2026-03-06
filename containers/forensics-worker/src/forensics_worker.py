@@ -7,7 +7,7 @@ import os
 import json
 import boto3
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 import threading
 import time

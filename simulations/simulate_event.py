@@ -1,6 +1,6 @@
 import json
 import boto3
-from datetime import datetime
+from datetime import datetime, timezone
 from src.handlers import lambda_handler
 
 def simulate_guardduty_event():
@@ -12,7 +12,7 @@ def simulate_guardduty_event():
         "detail-type": "GuardDuty Finding",
         "source": "aws.guardduty",
         "account": "123456789012",
-        "time": datetime.utcnow().isoformat() + "Z",
+        "time": datetime.now(timezone.utc).isoformat() + "Z",
         "region": "us-east-1",
         "resources": [],
         "detail": {
@@ -25,8 +25,8 @@ def simulate_guardduty_event():
             "type": "CryptoCurrency:EC2/BitcoinTool.B!DNS",
             "service": {"resourceRole": "TARGET"},
             "severity": 8.0,
-            "createdAt": datetime.utcnow().isoformat() + "Z",
-            "updatedAt": datetime.utcnow().isoformat() + "Z",
+            "createdAt": datetime.now(timezone.utc).isoformat() + "Z",
+            "updatedAt": datetime.now(timezone.utc).isoformat() + "Z",
             "title": "Crypto mining detected",
             "description": "Simulated bitcoin mining detected",
             "resources": [{"instanceDetails": {"instanceId": "i-1234567890abcdef0"}}]
