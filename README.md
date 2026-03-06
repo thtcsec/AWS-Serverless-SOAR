@@ -9,7 +9,50 @@ This project demonstrates a fully automated, enterprise-grade Serverless Inciden
 
 ## 🏛️ Architecture
 
-![Architecture Diagram](./images/aws_soar.png)
+### 🖼️ High-Level Architecture
+![Architecture Diagram](images/aws_soar.png)
+
+### ⚙️ Logical Data Flow (Mermaid)
+```mermaid
+graph TD
+  A[Attacker] -->|Compromises| B(EC2 Target)
+  A -->|Data Exfiltration| C[S3 Bucket]
+  A -->|IAM Compromise| D[IAM User]
+  
+  B -->|C&C / Crypto Mining| E{Amazon GuardDuty}
+  C -->|Unusual Access| F{CloudTrail}
+  D -->|Suspicious Activity| F
+  
+  E -->|High Severity Finding| G[Amazon EventBridge]
+  F -->|IAM/S3 Events| G
+  
+  G -->|Triggers Rule| H((AWS Lambda - EC2 Response))
+  G -->|Triggers Rule| I((AWS Lambda - S3 Response))
+  G -->|Triggers Rule| J((AWS Lambda - IAM Response))
+  
+  H -->|1. Isolate SG| B
+  H -->|2. Enforce IMDSv2| B
+  H -->|3. Detach IAM Role| B
+  H -->|4. Revoke Sessions| B
+  H -->|5. Take Snapshot| K[(EBS Snapshot)]
+  H -->|6. Stop Instance| B
+  
+  I -->|1. Block Access| C
+  I -->|2. Enable MFA Delete| C
+  I -->|3. Object Lock| C
+  I -->|4. Forensic Snapshot| L[(Bucket Metadata)]
+  
+  J -->|1. Disable Keys| D
+  J -->|2. Remove Groups| D
+  J -->|3. Enforce MFA| D
+  J -->|4. Investigation| M[Audit Logs]
+  
+  H -->|7. Send Alert| N[Amazon SNS]
+  I -->|5. Send Alert| N
+  J -->|5. Send Alert| N
+  
+  N -->|"Email / SMS"| O[Security Admin]
+```
 
 
 The workflow involves:
