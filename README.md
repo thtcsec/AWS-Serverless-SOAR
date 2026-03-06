@@ -227,16 +227,6 @@ To deploy the additional security playbooks:
 | IAM Compromise | CloudTrail | < 45 seconds | Disable Keys, Remove Roles |
 | EC2 C&C Activity | GuardDuty | < 30 seconds | Isolate, Revoke Sessions |
 
-## � Additional Architecture Diagrams
-
-For detailed architecture diagrams including:
-- Data Flow Architecture
-- Threat Response Timeline  
-- Component Interaction Map
-- Security Coverage Matrix
-
-See: [ARCHITECTURE_DIAGRAMS.md](../ARCHITECTURE_DIAGRAMS.md)
-
 ## �🔧 Configuration Options
 
 ### Environment Variables
