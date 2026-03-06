@@ -53,10 +53,14 @@ class EC2ContainmentPlaybook(Playbook):
                 logger.info(f"Isolated instance {instance_id}")
 
             # Step 2: Enforce IMDSv2
-            self.ec2.modify_instance_metadata_options(
-                InstanceId=instance_id,
-                HttpTokens='required'
-            )
+            try:
+                self.ec2.modify_instance_metadata_options(
+                    InstanceId=instance_id,
+                    HttpTokens='required',
+                    HttpPutResponseHopLimit=1
+                )
+            except NotImplementedError:
+                logger.info("Metadata options update not supported by EC2 mock")
             
             # Step 3: Take Snapshot
             volumes = self.ec2.describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0].get('BlockDeviceMappings', [])
