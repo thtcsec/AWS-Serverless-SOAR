@@ -20,3 +20,21 @@ variable "public_subnet_cidr" {
   type        = string
   default     = "10.0.1.0/24"
 }
+
+variable "lambda_memory_size" {
+  description = "Lambda memory size in MB for SOAR functions"
+  type        = number
+  default     = 256
+}
+
+variable "lambda_timeout" {
+  description = "Lambda timeout in seconds for SOAR functions"
+  type        = number
+  default     = 60
+}
+
+variable "lambda_reserved_concurrency" {
+  description = "Reserved concurrency for SOAR functions. Null keeps AWS default"
+  type        = number
+  default     = null
+}
