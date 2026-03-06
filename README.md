@@ -70,6 +70,9 @@ sequenceDiagram
 5. **Human Approval:** Manual approval for critical actions
 6. **Integrations:** Slack, Jira, SIEM notifications
 
+### 🖼️ High-Level Architecture
+![Architecture Diagram](images/aws_soar.png)
+
 ## 🕵️ Threat Scenario
 
 **Scenario:** An attacker discovers a Remote Code Execution (RCE) vulnerability on your public-facing application and installs a Monero cryptocurrency miner.
