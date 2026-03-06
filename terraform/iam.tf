@@ -37,11 +37,12 @@ resource "aws_iam_policy" "soar_incident_response_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        # EC2 isolation, IAM detachment, stop, and forensic snapshot permissions
+        # EC2 isolation, IAM detachment, stop, IMDSv2 enforcement, and forensic snapshot permissions
         Sid    = "EC2ForensicsAndIsolation"
         Effect = "Allow"
         Action = [
           "ec2:ModifyInstanceAttribute",
+          "ec2:ModifyInstanceMetadataOptions",
           "ec2:StopInstances",
           "ec2:CreateSnapshot",
           "ec2:CreateTags",
@@ -50,6 +51,16 @@ resource "aws_iam_policy" "soar_incident_response_policy" {
           "ec2:DisassociateIamInstanceProfile"
         ]
         Resource = "*" # In a production environment, restrict to specific VPCs/Instances using conditions
+      },
+      {
+        # IAM Permissions to kill active attacker sessions by putting an inline deny policy
+        Sid    = "IAMRevokeActiveSessions"
+        Effect = "Allow"
+        Action = [
+          "iam:GetInstanceProfile",
+          "iam:PutRolePolicy"
+        ]
+        Resource = "*" # Usually requires wildcards, or specific boundaries in Enterprise configs
       },
       {
         # SNS Notification Permission

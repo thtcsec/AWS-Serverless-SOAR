@@ -12,9 +12,12 @@ graph TD
   D -->|Triggers Rule| E((AWS Lambda))
   
   E -->|1. Isolate SG| B
-  E -->|2. Detach IAM Role| B
-  E -->|3. Take Disk Snapshot| F[(EBS Snapshot)]
-  E -->|4. Send Alert| G[Amazon SNS]
+  E -->|2. Enforce IMDSv2| B
+  E -->|3. Detach IAM Role| B
+  E -->|4. Revoke Active Sessions| I[IAM Inline Policy]
+  E -->|5. Take Disk Snapshot| F[(EBS Snapshot)]
+  E -->|6. Stop Instance| B
+  E -->|7. Send Alert| G[Amazon SNS]
   G -->|"Email / SMS"| H[Security Admin]
 ```
 
@@ -22,11 +25,14 @@ The workflow involves:
 1. **Detection:** Amazon GuardDuty detects anomalous behavior with severity >= 7.0 (e.g., EC2 communicating with a known C&C server).
 2. **Event Routing:** Amazon EventBridge intercepts the GuardDuty finding based on an event rule.
 3. **Automation Logic:** An AWS Lambda function (Python/Boto3) is triggered.
-4. **Resolution (Response):** 
+4. **Resolution (Response Playbook):** 
    - **Isolate:** Modifies the EC2 instance Security Group to an `Isolation SG` (0 ingress/egress).
-   - **Revoke:** Disassociates any attached IAM Instance Profiles so the hacker cannot hit AWS APIs.
+   - **IMDSv2 Enforce:** Enforces IMDSv2 to prevent further SSRF-based metadata and credential theft.
+   - **Revoke:** Disassociates any attached IAM Instance Profiles.
+   - **Kill Sessions:** Attaches an inline `Deny All` IAM policy with a `aws:TokenIssueTime` condition to immediately revoke any cached local credentials the hacker might be using.
    - **Preserve:** Takes an EBS Snapshot of the compromised instance for forensics.
    - **Tag:** Tags the instance as `Compromised: True`.
+   - **Stop:** Halts the instance process completely.
    - **Alert:** Sends an alert notification securely via Amazon SNS.
 
 ## 🕵️ Threat Scenario
@@ -35,7 +41,7 @@ The workflow involves:
 
 **Detection:** The malware begins making outbound DNS requests to known mining pools (e.g., `pool.minexmr.com`). GuardDuty analyzes the DNS logs and flags the instance with a *High-Severity* finding (`CryptoCurrency:EC2/BitcoinTool.B`).
 
-**Response:** Within seconds, the SOAR workflow executes. The instance is yanked off the network, its AWS privileges are revoked, and its hard drive is snapshotted for the Blue Team to legally investigate later.
+**Response:** Within seconds, the SOAR workflow executes. The instance is yanked off the network, its metadata endpoint is locked down, all active AWS privileges are explicitly revoked, its hard drive is snapshotted for the Blue Team, and the server shuts down.
 
 ## 🗂️ Project Structure
 - `src/`: Python code for the AWS Lambda responder.

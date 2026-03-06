@@ -8,6 +8,7 @@ logger.setLevel(logging.INFO)
 
 ec2 = boto3.client('ec2')
 sns = boto3.client('sns')
+iam = boto3.client('iam')
 
 ISOLATION_SG_ID = os.environ.get('ISOLATION_SG_ID')
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
@@ -42,10 +43,13 @@ def lambda_handler(event, context):
 
         # Execute SOAR playbook
         isolate_instance(instance_id)
-        detach_iam_role(instance_id)
+        enforce_imdsv2(instance_id)     # Prevent further SSRF metadata theft
+        detach_iam_role(instance_id)    # Detach role permanently
+        revoke_active_sessions(instance_id) # Kill existing cached tokens
+        tag_instance(instance_id)       # Tag as Quarantine before snapshot
         take_snapshot(instance_id, finding_type)
         stop_instance(instance_id)
-        tag_instance(instance_id)
+        
         notify_team(instance_id, finding_type)
 
         return {'statusCode': 200, 'body': f'Successfully responded to threat on {instance_id}'}
@@ -61,6 +65,17 @@ def isolate_instance(instance_id):
         Groups=[ISOLATION_SG_ID]
     )
 
+def enforce_imdsv2(instance_id):
+    logger.info(f"Enforcing IMDSv2 on instance {instance_id} to prevent SSRF metadata theft.")
+    try:
+        ec2.modify_instance_metadata_options(
+            InstanceId=instance_id,
+            HttpTokens='required',
+            HttpEndpoint='enabled'
+        )
+    except Exception as e:
+        logger.error(f"Failed to enforce IMDSv2: {str(e)}")
+
 def detach_iam_role(instance_id):
     logger.info(f"Detaching IAM roles from instance {instance_id}")
     try:
@@ -74,6 +89,57 @@ def detach_iam_role(instance_id):
             ec2.disassociate_iam_instance_profile(AssociationId=assoc_id)
     except Exception as e:
         logger.error(f"Failed to detach IAM role: {str(e)}")
+
+def revoke_active_sessions(instance_id):
+    logger.info(f"Attempting to revoke active IAM sessions associated with {instance_id}")
+    try:
+        # First, we need to find the actual IAM Role name attached to the instance
+        response = ec2.describe_instances(InstanceIds=[instance_id])
+        iam_profile_arn = response['Reservations'][0]['Instances'][0].get('IamInstanceProfile', {}).get('Arn')
+        
+        if not iam_profile_arn:
+            logger.info("No IAM profile attached, skipping session revocation.")
+            return
+            
+        # Extract role name from instance profile (often 1:1, though technically profiles can have multiple)
+        # Boto3 iam get_instance_profile is needed
+        profile_name = iam_profile_arn.split('/')[-1]
+        profile_info = iam.get_instance_profile(InstanceProfileName=profile_name)
+        
+        roles = profile_info['InstanceProfile']['Roles']
+        if not roles:
+            return
+            
+        # Revoke sessions for the primary role by attaching an inline deny-all policy
+        # Valid only for sessions issued before this exact moment
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        for role in roles:
+            role_name = role['RoleName']
+            logger.info(f"Revoking active sessions for IAM Role: {role_name}")
+            policy_document = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Deny",
+                        "Action": "*",
+                        "Resource": "*",
+                        "Condition": {
+                            "DateLessThan": {
+                                "aws:TokenIssueTime": timestamp
+                            }
+                        }
+                    }
+                ]
+            }
+            iam.put_role_policy(
+                RoleName=role_name,
+                PolicyName=f"SOAR-SessionRevocation-{instance_id}",
+                PolicyDocument=json.dumps(policy_document)
+            )
+    except Exception as e:
+        logger.error(f"Failed to revoke active IAM sessions: {str(e)}")
 
 def take_snapshot(instance_id, finding_type):
     from datetime import datetime
@@ -120,7 +186,7 @@ def notify_team(instance_id, finding_type):
         f"🚨 SECURITY ALERT: SOAR Playbook Triggered 🚨\n\n"
         f"Instance ID: {instance_id}\n"
         f"Finding: {finding_type}\n"
-        f"Action: Instance Isolated, IAM Roles Detached, Snapshot Captured, Instance STOPPED."
+        f"Action: Instance Isolated, IAM Revoked (Sessions Killed), IMDSv2 Enforced, Snapshot Captured, Instance STOPPED."
     )
     sns.publish(
         TopicArn=SNS_TOPIC_ARN,
