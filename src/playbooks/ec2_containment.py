@@ -32,7 +32,7 @@ class EC2ContainmentPlaybook(Playbook):
     def execute(self, event_data: Dict[str, Any]) -> bool:
         try:
             event = GuardDutyEvent.model_validate(event_data)
-            instance_id = event.detail.resources[0].get('instanceDetails', {}).get('instanceId')
+            instance_id = event.detail.resource.get('instanceDetails', {}).get('instanceId')
             
             if not instance_id:
                 logger.error("No instance ID found in GuardDuty finding")

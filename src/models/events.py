@@ -20,6 +20,7 @@ class GuardDutyDetail(BaseModel):
     updatedAt: str
     title: str
     description: str
+    resource: Dict[str, Any]
 
 class GuardDutyEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")

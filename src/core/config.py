@@ -13,4 +13,4 @@ class SOARConfig(BaseSettings):
         env_file_encoding = "utf-8"
 
 # Global configuration instance
-config = SOARConfig()
+config = SOARConfig()  # type: ignore[call-arg]
