@@ -1,7 +1,7 @@
 import json
 import boto3
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -91,7 +91,7 @@ def is_unusual_source_ip(source_ip, user_identity):
     """Check if source IP is unusual for this user"""
     try:
         # Get recent CloudTrail events for this user
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(days=30)
         
         response = cloudtrail.lookup_events(
@@ -153,7 +153,7 @@ def investigate_compromise(username, user_arn, event_name, source_ip):
             'recent_activity_count': len(recent_activity),
             'failed_login_attempts': failed_logins,
             'concurrent_sessions': concurrent_sessions,
-            'investigation_time': datetime.utcnow().isoformat()
+            'investigation_time': datetime.now(timezone.utc).isoformat()
         }
         
         logger.info(f"Investigation result: {json.dumps(investigation_result)}")
@@ -167,7 +167,7 @@ def investigate_compromise(username, user_arn, event_name, source_ip):
 def get_user_recent_activity(username, hours=24):
     """Get user's recent IAM activity"""
     try:
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
         
         response = cloudtrail.lookup_events(
@@ -188,7 +188,7 @@ def get_user_recent_activity(username, hours=24):
 def count_failed_logins(username, hours=24):
     """Count failed login attempts for user"""
     try:
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
         
         response = cloudtrail.lookup_events(
@@ -326,7 +326,7 @@ Response Actions Taken:
 - MFA enforcement initiated
 - Security team notified
 
-Time: {datetime.utcnow().isoformat()}
+Time: {datetime.now(timezone.utc).isoformat()}
 
 Next Steps:
 1. Verify user identity through out-of-band channel

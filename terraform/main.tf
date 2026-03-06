@@ -146,7 +146,7 @@ resource "aws_lambda_function" "soar_responder" {
   function_name    = "soar-incident-responder"
   role             = aws_iam_role.lambda_exec_role.arn
   handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.10"
+  runtime          = "python3.12"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   environment {
@@ -192,4 +192,111 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   function_name = aws_lambda_function.soar_responder.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.guardduty_finding.arn
+}
+
+# ==========================================
+# 6. AUTOMATION: IAM COMPROMISE (Lambda & EventBridge)
+# ==========================================
+
+data "archive_file" "iam_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../src/iam_compromise_response.py"
+  output_path = "${path.module}/iam_soar_lambda.zip"
+}
+
+resource "aws_lambda_function" "iam_soar_responder" {
+  filename         = data.archive_file.iam_lambda_zip.output_path
+  function_name    = "iam-soar-incident-responder"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "iam_compromise_response.lambda_handler"
+  runtime          = "python3.12"
+  source_code_hash = data.archive_file.iam_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
+    }
+  }
+
+  tags = {
+    Name = "IAM-SOAR-Respondent-Lambda"
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "iam_finding" {
+  name        = "capture-iam-findings"
+  description = "Capture IAM updates to trigger SOAR"
+
+  event_pattern = jsonencode({
+    source = ["aws.iam"]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "trigger_iam_lambda" {
+  rule      = aws_cloudwatch_event_rule.iam_finding.name
+  target_id = "TriggerIAMSOARLambda"
+  arn       = aws_lambda_function.iam_soar_responder.arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_iam" {
+  statement_id  = "AllowExecutionFromEventBridgeIAM"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.iam_soar_responder.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.iam_finding.arn
+}
+
+# ==========================================
+# 7. AUTOMATION: S3 EXFILTRATION (Lambda & EventBridge)
+# ==========================================
+
+data "archive_file" "s3_lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/../src/s3_exfiltration_response.py"
+  output_path = "${path.module}/s3_soar_lambda.zip"
+}
+
+resource "aws_lambda_function" "s3_soar_responder" {
+  filename         = data.archive_file.s3_lambda_zip.output_path
+  function_name    = "s3-soar-incident-responder"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "s3_exfiltration_response.lambda_handler"
+  runtime          = "python3.12"
+  source_code_hash = data.archive_file.s3_lambda_zip.output_base64sha256
+
+  environment {
+    variables = {
+      SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
+    }
+  }
+
+  tags = {
+    Name = "S3-SOAR-Respondent-Lambda"
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "s3_finding" {
+  name        = "capture-s3-findings"
+  description = "Capture S3 read events for exfiltration SOAR"
+
+  event_pattern = jsonencode({
+    source = ["aws.s3"]
+    detail = {
+      eventName = ["GetObject", "ListObjects", "DownloadFile"]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "trigger_s3_lambda" {
+  rule      = aws_cloudwatch_event_rule.s3_finding.name
+  target_id = "TriggerS3SOARLambda"
+  arn       = aws_lambda_function.s3_soar_responder.arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_s3" {
+  statement_id  = "AllowExecutionFromEventBridgeS3"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.s3_soar_responder.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.s3_finding.arn
 }

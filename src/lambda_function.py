@@ -112,8 +112,8 @@ def revoke_active_sessions(instance_id):
             
         # Revoke sessions for the primary role by attaching an inline deny-all policy
         # Valid only for sessions issued before this exact moment
-        from datetime import datetime
-        timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        from datetime import datetime, timezone
+        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         
         for role in roles:
             role_name = role['RoleName']
@@ -142,8 +142,8 @@ def revoke_active_sessions(instance_id):
         logger.error(f"Failed to revoke active IAM sessions: {str(e)}")
 
 def take_snapshot(instance_id, finding_type):
-    from datetime import datetime
-    timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    from datetime import datetime, timezone
+    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     logger.info(f"Taking snapshot for volumes of {instance_id}")
     
     response = ec2.describe_instances(InstanceIds=[instance_id])

@@ -63,6 +63,24 @@ resource "aws_iam_policy" "soar_incident_response_policy" {
         Resource = "*" # Usually requires wildcards, or specific boundaries in Enterprise configs
       },
       {
+        # Additional permissions for IAM and S3 SOAR responses
+        Sid    = "IAMandS3Response"
+        Effect = "Allow"
+        Action = [
+          "cloudtrail:LookupEvents",
+          "iam:ListAccessKeys",
+          "iam:UpdateAccessKey",
+          "iam:ListGroupsForUser",
+          "iam:RemoveUserFromGroup",
+          "iam:ListMFADevices",
+          "s3:GetBucketPolicy",
+          "s3:PutBucketPolicy",
+          "s3:PutBucketVersioning",
+          "s3:PutObjectLockConfiguration"
+        ]
+        Resource = "*"
+      },
+      {
         # SNS Notification Permission
         Sid      = "SNSAlerting"
         Effect   = "Allow"

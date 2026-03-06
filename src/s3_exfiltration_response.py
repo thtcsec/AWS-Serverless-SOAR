@@ -1,7 +1,7 @@
 import json
 import boto3
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -60,7 +60,7 @@ def get_recent_s3_access(user_arn, bucket_name, hours=24):
     try:
         # Query CloudTrail for S3 events in last 24 hours
         cloudtrail = boto3.client('cloudtrail')
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
         
         response = cloudtrail.lookup_events(
@@ -215,7 +215,7 @@ Response Actions Taken:
 - S3 protection features enabled
 - Security team notified
 
-Time: {datetime.utcnow().isoformat()}
+Time: {datetime.now(timezone.utc).isoformat()}
         """
         
         sns.publish(
