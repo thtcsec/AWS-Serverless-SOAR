@@ -76,6 +76,11 @@ resource "aws_iam_role_policy_attachment" "slack_integration_policy_attach" {
   policy_arn = aws_iam_policy.slack_integration_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "slack_xray_access" {
+  role       = aws_iam_role.slack_integration_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # Slack notification Lambda
 data "archive_file" "slack_lambda_zip" {
   type        = "zip"
@@ -92,6 +97,10 @@ resource "aws_lambda_function" "slack_notifier" {
   source_code_hash = data.archive_file.slack_lambda_zip.output_base64sha256
   memory_size      = 256
   timeout          = 60
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -185,6 +194,11 @@ resource "aws_iam_role_policy_attachment" "jira_integration_policy_attach" {
   policy_arn = aws_iam_policy.jira_integration_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "jira_xray_access" {
+  role       = aws_iam_role.jira_integration_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # Jira ticket management Lambda
 data "archive_file" "jira_lambda_zip" {
   type        = "zip"
@@ -201,6 +215,10 @@ resource "aws_lambda_function" "jira_manager" {
   source_code_hash = data.archive_file.jira_lambda_zip.output_base64sha256
   memory_size      = 256
   timeout          = 120
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -294,6 +312,11 @@ resource "aws_iam_role_policy_attachment" "siem_integration_policy_attach" {
   policy_arn = aws_iam_policy.siem_integration_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "siem_xray_access" {
+  role       = aws_iam_role.siem_integration_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # SIEM forwarder Lambda
 data "archive_file" "siem_lambda_zip" {
   type        = "zip"
@@ -310,6 +333,10 @@ resource "aws_lambda_function" "siem_forwarder" {
   source_code_hash = data.archive_file.siem_lambda_zip.output_base64sha256
   memory_size      = 256
   timeout          = 120
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {

@@ -511,5 +511,82 @@ resource "aws_s3_bucket_public_access_block" "central_logs" {
   restrict_public_buckets = true
 }
 
+# ==========================================
+# Security Hub
+# ==========================================
+resource "aws_securityhub_account" "main" {}
+
+resource "aws_securityhub_standards_subscription" "cis" {
+  depends_on    = [aws_securityhub_account.main]
+  standards_arn = "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.4.0"
+}
+
+resource "aws_securityhub_standards_subscription" "aws_best_practices" {
+  depends_on    = [aws_securityhub_account.main]
+  standards_arn = "arn:aws:securityhub:${data.aws_region.current.name}::standards/aws-foundational-security-best-practices/v/1.0.0"
+}
+
+# Import GuardDuty findings into Security Hub
+resource "aws_securityhub_product_subscription" "guardduty" {
+  depends_on  = [aws_securityhub_account.main]
+  product_arn = "arn:aws:securityhub:${data.aws_region.current.name}::product/aws/guardduty"
+}
+
+# Import Inspector findings into Security Hub
+resource "aws_securityhub_product_subscription" "inspector" {
+  depends_on  = [aws_securityhub_account.main]
+  product_arn = "arn:aws:securityhub:${data.aws_region.current.name}::product/aws/inspector"
+}
+
+# Import Macie findings into Security Hub
+resource "aws_securityhub_product_subscription" "macie" {
+  depends_on  = [aws_securityhub_account.main]
+  product_arn = "arn:aws:securityhub:${data.aws_region.current.name}::product/aws/macie"
+}
+
+# ==========================================
+# Amazon Inspector v2
+# ==========================================
+resource "aws_inspector2_enabler" "inspector" {
+  account_ids    = [data.aws_caller_identity.current.account_id]
+  resource_types = ["EC2", "ECR", "LAMBDA"]
+}
+
+# ==========================================
+# Amazon Macie
+# ==========================================
+resource "aws_macie2_account" "main" {}
+
+resource "aws_macie2_classification_export_configuration" "s3_export" {
+  depends_on = [aws_macie2_account.main]
+
+  s3_destination {
+    bucket_name = aws_s3_bucket.central_logs.id
+    key_prefix  = "macie-findings/"
+    kms_key_arn = aws_kms_key.soar_key.arn
+  }
+}
+
+# KMS key for Macie export encryption
+resource "aws_kms_key" "soar_key" {
+  description             = "KMS key for SOAR data encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${var.environment}-soar-kms-key"
+      Environment = var.environment
+    }
+  )
+}
+
+resource "aws_kms_alias" "soar_key" {
+  name          = "alias/${var.environment}-soar-key"
+  target_key_id = aws_kms_key.soar_key.id
+}
+
 # Data source for current account
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}

@@ -3,6 +3,7 @@ from typing import Dict, Any
 from src.playbooks.base import Playbook
 from src.core.logger import logger
 from src.clients.aws import AWSClientFacade
+from src.core.metrics import emit_metric, PlaybookTimer
 from pydantic import ValidationError
 from src.models.events import S3CloudTrailEvent
 from src.core.config import config
@@ -21,26 +22,28 @@ class S3ExfiltrationPlaybook(Playbook):
             return False
 
     def execute(self, event_data: Dict[str, Any]) -> bool:
-        try:
-            event = S3CloudTrailEvent.model_validate(event_data)
-            
-            # Extract basic data
-            bucket_name = event.detail.requestParameters.get('bucketName') if event.detail.requestParameters else None
-            user_arn = event.detail.userIdentity.get('arn')
-            
-            if not bucket_name or not user_arn:
-                return False
+        with PlaybookTimer("S3Exfiltration"):
+            try:
+                event = S3CloudTrailEvent.model_validate(event_data)
+                
+                # Extract basic data
+                bucket_name = event.detail.requestParameters.get('bucketName') if event.detail.requestParameters else None
+                user_arn = event.detail.userIdentity.get('arn')
+                
+                if not bucket_name or not user_arn:
+                    return False
 
-            logger.warning(f"S3 Exfiltration detected on bucket {bucket_name} by user {user_arn}")
-            
-            self._block_user_access(user_arn, bucket_name)
-            self._enable_s3_protection(bucket_name)
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"S3 Exfiltration Response failed: {str(e)}")
-            return False
+                logger.warning(f"S3 Exfiltration detected on bucket {bucket_name} by user {user_arn}")
+                emit_metric("FindingsProcessed", 1.0, "Count", {"Playbook": "S3Exfiltration"})
+                
+                self._block_user_access(user_arn, bucket_name)
+                self._enable_s3_protection(bucket_name)
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"S3 Exfiltration Response failed: {str(e)}")
+                return False
 
     def _block_user_access(self, user_arn: str, bucket_name: str) -> None:
         import json

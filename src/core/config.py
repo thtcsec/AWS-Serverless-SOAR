@@ -7,6 +7,8 @@ class SOARConfig(BaseSettings):
     sns_topic_arn: str = Field(..., alias="SNS_TOPIC_ARN", description="ARN of the SNS topic for alerts")
     exfiltration_threshold: int = Field(10737418240, alias="EXFILTRATION_THRESHOLD", description="Bytes threshold for S3 exfiltration alert")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
+    evidence_bucket: str = Field("", alias="EVIDENCE_BUCKET", description="S3 bucket for forensic evidence")
+    metrics_namespace: str = Field("SOAR/IncidentResponse", alias="METRICS_NAMESPACE", description="CloudWatch metrics namespace")
 
     class Config:
         env_file = ".env"

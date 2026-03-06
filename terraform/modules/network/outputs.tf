@@ -37,3 +37,13 @@ output "internet_gateway_id" {
   description = "ID of the internet gateway"
   value       = aws_internet_gateway.igw.id
 }
+
+output "vpc_flow_log_id" {
+  description = "ID of the VPC Flow Log"
+  value       = aws_flow_log.vpc_flow_log.id
+}
+
+output "vpc_flow_log_group_name" {
+  description = "Name of the CloudWatch log group for VPC Flow Logs"
+  value       = aws_cloudwatch_log_group.vpc_flow_logs.name
+}

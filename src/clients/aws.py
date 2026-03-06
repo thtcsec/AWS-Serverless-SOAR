@@ -29,3 +29,13 @@ class AWSClientFacade:
     @lru_cache()
     def cloudtrail(cls) -> Any:
         return boto3.client('cloudtrail')
+
+    @classmethod
+    @lru_cache()
+    def cloudwatch(cls) -> Any:
+        return boto3.client('cloudwatch')
+
+    @classmethod
+    @lru_cache()
+    def securityhub(cls) -> Any:
+        return boto3.client('securityhub')

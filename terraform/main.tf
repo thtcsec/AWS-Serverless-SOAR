@@ -152,6 +152,10 @@ resource "aws_lambda_function" "soar_responder" {
   timeout          = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
       ISOLATION_SG_ID = aws_security_group.isolation_sg.id
@@ -218,6 +222,10 @@ resource "aws_lambda_function" "iam_soar_responder" {
   timeout          = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
       SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
@@ -272,6 +280,10 @@ resource "aws_lambda_function" "s3_soar_responder" {
   memory_size      = var.lambda_memory_size
   timeout          = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {

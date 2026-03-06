@@ -96,6 +96,87 @@ resource "aws_cloudwatch_event_rule" "s3_data_events" {
 }
 
 # ==========================================
+# Security Hub Findings EventBridge Rule
+# ==========================================
+resource "aws_cloudwatch_event_rule" "securityhub_findings" {
+  name        = "${var.environment}-soar-securityhub-findings"
+  description = "Capture Security Hub findings for SOAR processing"
+
+  event_pattern = jsonencode({
+    source      = ["aws.securityhub"]
+    detail-type = ["Security Hub Findings - Imported"]
+    detail = {
+      findings = {
+        Severity = {
+          Label = ["CRITICAL", "HIGH"]
+        }
+      }
+    }
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${var.environment}-soar-securityhub-rule"
+      Environment = var.environment
+      Purpose     = "security-event-routing"
+    }
+  )
+}
+
+# ==========================================
+# Inspector Findings EventBridge Rule
+# ==========================================
+resource "aws_cloudwatch_event_rule" "inspector_findings" {
+  name        = "${var.environment}-soar-inspector-findings"
+  description = "Capture Amazon Inspector findings for SOAR processing"
+
+  event_pattern = jsonencode({
+    source      = ["aws.inspector2"]
+    detail-type = ["Inspector2 Finding"]
+    detail = {
+      severity = ["CRITICAL", "HIGH"]
+    }
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${var.environment}-soar-inspector-rule"
+      Environment = var.environment
+      Purpose     = "security-event-routing"
+    }
+  )
+}
+
+# ==========================================
+# Macie Findings EventBridge Rule
+# ==========================================
+resource "aws_cloudwatch_event_rule" "macie_findings" {
+  name        = "${var.environment}-soar-macie-findings"
+  description = "Capture Macie findings for SOAR processing"
+
+  event_pattern = jsonencode({
+    source      = ["aws.macie"]
+    detail-type = ["Macie Finding"]
+    detail = {
+      severity = {
+        description = ["High", "Critical"]
+      }
+    }
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name        = "${var.environment}-soar-macie-rule"
+      Environment = var.environment
+      Purpose     = "security-event-routing"
+    }
+  )
+}
+
+# ==========================================
 # EventBridge Targets - Send to SQS
 # ==========================================
 resource "aws_cloudwatch_event_target" "guardduty_to_sqs" {
@@ -183,6 +264,96 @@ resource "aws_cloudwatch_event_target" "s3_to_sqs" {
   "account": <account>,
   "region": <region>,
   "event": <detail>,
+  "routing_timestamp": "$$.time"
+}
+EOF
+  }
+}
+
+resource "aws_cloudwatch_event_target" "securityhub_to_sqs" {
+  rule      = aws_cloudwatch_event_rule.securityhub_findings.name
+  target_id = "SecurityHubToSQS"
+  arn       = var.main_queue_arn
+
+  input_transformer = {
+    input_paths = {
+      source     = "$.source"
+      detailType = "$.detail-type"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
+    }
+    input_template = <<EOF
+{
+  "event_source": <source>,
+  "event_type": <detailType>,
+  "event_time": <time>,
+  "event_id": <id>,
+  "account": <account>,
+  "region": <region>,
+  "finding": <detail>,
+  "routing_timestamp": "$$.time"
+}
+EOF
+  }
+}
+
+resource "aws_cloudwatch_event_target" "inspector_to_sqs" {
+  rule      = aws_cloudwatch_event_rule.inspector_findings.name
+  target_id = "InspectorToSQS"
+  arn       = var.main_queue_arn
+
+  input_transformer = {
+    input_paths = {
+      source     = "$.source"
+      detailType = "$.detail-type"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
+    }
+    input_template = <<EOF
+{
+  "event_source": <source>,
+  "event_type": <detailType>,
+  "event_time": <time>,
+  "event_id": <id>,
+  "account": <account>,
+  "region": <region>,
+  "finding": <detail>,
+  "routing_timestamp": "$$.time"
+}
+EOF
+  }
+}
+
+resource "aws_cloudwatch_event_target" "macie_to_sqs" {
+  rule      = aws_cloudwatch_event_rule.macie_findings.name
+  target_id = "MacieToSQS"
+  arn       = var.main_queue_arn
+
+  input_transformer = {
+    input_paths = {
+      source     = "$.source"
+      detailType = "$.detail-type"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
+    }
+    input_template = <<EOF
+{
+  "event_source": <source>,
+  "event_type": <detailType>,
+  "event_time": <time>,
+  "event_id": <id>,
+  "account": <account>,
+  "region": <region>,
+  "finding": <detail>,
   "routing_timestamp": "$$.time"
 }
 EOF
@@ -283,6 +454,11 @@ resource "aws_iam_role_policy_attachment" "queue_processor_policy_attach" {
   policy_arn = aws_iam_policy.queue_processor_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "queue_processor_xray_access" {
+  role       = aws_iam_role.queue_processor_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # Archive the queue processor Lambda
 data "archive_file" "queue_processor_zip" {
   type        = "zip"
@@ -299,6 +475,10 @@ resource "aws_lambda_function" "queue_processor" {
   source_code_hash = data.archive_file.queue_processor_zip.output_base64sha256
   memory_size      = 256
   timeout          = 300
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {

@@ -26,6 +26,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# 2b. Attach X-Ray tracing privileges
+resource "aws_iam_role_policy_attachment" "lambda_xray_access" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # 3. Custom Policy: The "SOAR Privileges"
 # This policy is strictly scoped down (Least Privilege Principle constraint) 
 # instead of granting 'AdministratorAccess' or full EC2 access.
