@@ -183,7 +183,7 @@ def tag_instance(instance_id):
 
 def notify_team(instance_id, finding_type):
     message = (
-        f"🚨 SECURITY ALERT: SOAR Playbook Triggered 🚨\n\n"
+        f"SECURITY ALERT: SOAR Playbook Triggered\n\n"
         f"Instance ID: {instance_id}\n"
         f"Finding: {finding_type}\n"
         f"Action: Instance Isolated, IAM Revoked (Sessions Killed), IMDSv2 Enforced, Snapshot Captured, Instance STOPPED."

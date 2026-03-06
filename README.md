@@ -7,18 +7,42 @@ This project demonstrates a fully automated Serverless Incident Response archite
 ```mermaid
 graph TD
   A[Attacker] -->|Compromises| B(EC2 Target)
-  B -->|C&C / Crypto Mining| C{Amazon GuardDuty}
-  C -->|High Severity Finding| D[Amazon EventBridge]
-  D -->|Triggers Rule| E((AWS Lambda))
+  A -->|Data Exfiltration| C[S3 Bucket]
+  A -->|IAM Compromise| D[IAM User]
   
-  E -->|1. Isolate SG| B
-  E -->|2. Enforce IMDSv2| B
-  E -->|3. Detach IAM Role| B
-  E -->|4. Revoke Active Sessions| I[IAM Inline Policy]
-  E -->|5. Take Disk Snapshot| F[(EBS Snapshot)]
-  E -->|6. Stop Instance| B
-  E -->|7. Send Alert| G[Amazon SNS]
-  G -->|"Email / SMS"| H[Security Admin]
+  B -->|C&C / Crypto Mining| E{Amazon GuardDuty}
+  C -->|Unusual Access| F{CloudTrail}
+  D -->|Suspicious Activity| F
+  
+  E -->|High Severity Finding| G[Amazon EventBridge]
+  F -->|IAM/S3 Events| G
+  
+  G -->|Triggers Rule| H((AWS Lambda - EC2 Response))
+  G -->|Triggers Rule| I((AWS Lambda - S3 Response))
+  G -->|Triggers Rule| J((AWS Lambda - IAM Response))
+  
+  H -->|1. Isolate SG| B
+  H -->|2. Enforce IMDSv2| B
+  H -->|3. Detach IAM Role| B
+  H -->|4. Revoke Sessions| B
+  H -->|5. Take Snapshot| K[(EBS Snapshot)]
+  H -->|6. Stop Instance| B
+  
+  I -->|1. Block Access| C
+  I -->|2. Enable MFA Delete| C
+  I -->|3. Object Lock| C
+  I -->|4. Forensic Snapshot| L[(Bucket Metadata)]
+  
+  J -->|1. Disable Keys| D
+  J -->|2. Remove Groups| D
+  J -->|3. Enforce MFA| D
+  J -->|4. Investigation| M[Audit Logs]
+  
+  H -->|7. Send Alert| N[Amazon SNS]
+  I -->|5. Send Alert| N
+  J -->|5. Send Alert| N
+  
+  N -->|"Email / SMS"| O[Security Admin]
 ```
 
 The workflow involves:
@@ -44,8 +68,12 @@ The workflow involves:
 **Response:** Within seconds, the SOAR workflow executes. The instance is yanked off the network, its metadata endpoint is locked down, all active AWS privileges are explicitly revoked, its hard drive is snapshotted for the Blue Team, and the server shuts down.
 
 ## 🗂️ Project Structure
-- `src/`: Python code for the AWS Lambda responder.
+- `src/`: Python code for the AWS Lambda responders.
+  - `lambda_function.py`: Main EC2 incident response playbook
+  - `s3_exfiltration_response.py`: S3 data exfiltration detection and response
+  - `iam_compromise_response.py`: IAM compromise detection and response
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
+- `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
 
 ## 🚀 Deployment Instructions
 
@@ -97,3 +125,111 @@ Use the provided bash scripts to generate real network traffic patterns that Gua
    ```
 3. **Wait:** GuardDuty typically takes 15-20 minutes to generate and propagate an actual finding for continuous traffic. 
 4. **Observe:** Check your email. The SOAR logic will fire, taking an EBS Snapshot, detaching its IAM roles, and destroying your SSH connection (by swapping the Security Group).
+
+## 🛡️ Additional Security Playbooks
+
+### 1. S3 Data Exfiltration Detection & Response
+**Detection:** Monitors CloudTrail logs for unusual S3 access patterns including:
+- Large volume downloads (>10GB threshold)
+- High frequency access (>1000 operations/24hrs)
+- Multiple source IPs
+- Off-hours access patterns
+
+**Response Actions:**
+- Block user access via bucket policies
+- Enable S3 protection features (MFA Delete, Object Lock)
+- Create forensic snapshots of bucket metadata
+- Send security alerts with detailed analysis
+
+**Trigger:** CloudTrail events for S3 `GetObject`, `ListObjects`, `DownloadFile` operations
+
+### 2. IAM Compromise Detection & Response
+**Detection:** Analyzes IAM audit events for suspicious activities:
+- Privilege escalation attempts
+- Unusual source IPs
+- Failed login patterns
+- Concurrent sessions from different locations
+- Suspicious timing (off-hours changes)
+
+**Response Actions:**
+- Disable compromised user access keys
+- Remove from privileged IAM groups
+- Enforce MFA requirements
+- Conduct comprehensive investigation
+- Send detailed security alerts
+
+**Trigger:** CloudTrail events for IAM operations (CreateUser, AttachPolicy, etc.)
+
+## 🎯 Deployment for New Playbooks
+
+To deploy the additional security playbooks:
+
+1. **S3 Exfiltration Response:**
+   ```bash
+   # Deploy Lambda function
+   aws lambda create-function \
+     --function-name s3-exfiltration-response \
+     --runtime python3.9 \
+     --role <your-lambda-execution-role> \
+     --handler s3_exfiltration_response.lambda_handler \
+     --zip-file fileb://s3_exfiltration_response.zip \
+     --environment Variables='{SNS_TOPIC_arn=<your-sns-topic>,EXFILTRATION_THRESHOLD=10737418240}'
+   
+   # Create EventBridge rule for S3 events
+   aws events put-rule \
+     --name s3-exfiltration-detection \
+     --event-pattern '{"source":["aws.s3"],"detail-type":["AWS API Call via CloudTrail"],"detail":{"eventSource":["s3.amazonaws.com"],"eventName":["GetObject","ListObjects"]}}'
+   
+   # Add Lambda target
+   aws events put-targets \
+     --rule s3-exfiltration-detection \
+     --targets '{"Id": "1","Arn": "<your-lambda-arn>"}'
+   ```
+
+2. **IAM Compromise Response:**
+   ```bash
+   # Deploy Lambda function
+   aws lambda create-function \
+     --function-name iam-compromise-response \
+     --runtime python3.9 \
+     --role <your-lambda-execution-role> \
+     --handler iam_compromise_response.lambda_handler \
+     --zip-file fileb://iam_compromise_response.zip \
+     --environment Variables='{SNS_TOPIC_arn=<your-sns-topic>}'
+   
+   # Create EventBridge rule for IAM events
+   aws events put-rule \
+     --name iam-compromise-detection \
+     --event-pattern '{"source":["aws.iam"],"detail-type":["AWS API Call via CloudTrail"]}'
+   
+   # Add Lambda target
+   aws events put-targets \
+     --rule iam-compromise-detection \
+     --targets '{"Id": "1","Arn": "<your-lambda-arn>"}'
+   ```
+
+## 📊 Security Coverage Matrix
+
+| Threat Type | Detection Source | Response Time | Automated Actions |
+|-------------|------------------|---------------|-------------------|
+| EC2 Crypto Mining | GuardDuty | < 30 seconds | Isolate, Snapshot, Stop |
+| S3 Data Exfiltration | CloudTrail | < 60 seconds | Block Access, Protect Bucket |
+| IAM Compromise | CloudTrail | < 45 seconds | Disable Keys, Remove Roles |
+| EC2 C&C Activity | GuardDuty | < 30 seconds | Isolate, Revoke Sessions |
+
+## � Additional Architecture Diagrams
+
+For detailed architecture diagrams including:
+- Data Flow Architecture
+- Threat Response Timeline  
+- Component Interaction Map
+- Security Coverage Matrix
+
+See: [ARCHITECTURE_DIAGRAMS.md](../ARCHITECTURE_DIAGRAMS.md)
+
+## �🔧 Configuration Options
+
+### Environment Variables
+- `EXFILTRATION_THRESHOLD`: S3 download size threshold (default: 10GB)
+- `SNS_TOPIC_ARN`: Alert notification topic
+- `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 7)
