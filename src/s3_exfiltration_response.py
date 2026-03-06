@@ -120,27 +120,40 @@ def is_exfiltration_detected(access_data, current_event):
 def block_user_access(user_arn, bucket_name):
     """Block user access to the compromised bucket"""
     try:
-        # Create deny policy for the user
-        policy_name = f"S3ExfilBlock-{bucket_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        deny_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Deny",
-                    "Principal": {"AWS": user_arn},
-                    "Action": "s3:*",
-                    "Resource": [
-                        f"arn:aws:s3:::{bucket_name}",
-                        f"arn:aws:s3:::{bucket_name}/*"
-                    ]
-                }
+        # Create deny statement for the user
+        deny_statement = {
+            "Sid": f"S3ExfilBlock{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "Effect": "Deny",
+            "Principal": {"AWS": user_arn},
+            "Action": "s3:*",
+            "Resource": [
+                f"arn:aws:s3:::{bucket_name}",
+                f"arn:aws:s3:::{bucket_name}/*"
             ]
         }
         
+        # Safe Append: Get existing policy first
+        try:
+            response = s3.get_bucket_policy(Bucket=bucket_name)
+            policy = json.loads(response['Policy'])
+        except s3.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchBucketPolicy':
+                policy = {
+                    "Version": "2012-10-17",
+                    "Statement": []
+                }
+            else:
+                raise e
+                
+        # Append the new deny statement
+        if 'Statement' in policy:
+            policy['Statement'].append(deny_statement)
+        else:
+            policy['Statement'] = [deny_statement]
+            
         s3.put_bucket_policy(
             Bucket=bucket_name,
-            Policy=json.dumps(deny_policy)
+            Policy=json.dumps(policy)
         )
         
         logger.info(f"Applied deny policy for user {user_arn} on bucket {bucket_name}")
