@@ -38,3 +38,9 @@ variable "lambda_reserved_concurrency" {
   type        = number
   default     = null
 }
+
+variable "sns_alert_topic_arn" {
+  description = "SNS topic ARN for CloudWatch alarm notifications"
+  type        = string
+  default     = ""
+}
