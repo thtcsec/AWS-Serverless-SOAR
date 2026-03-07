@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 os.environ['SNS_TOPIC_ARN'] = 'arn:aws:sns:us-east-1:123456789012:security-alerts'
-os.environ['EXFILTRATION_THRESHOLD'] = '10000000000'
 
 import src.s3_exfiltration_response as resp
 
