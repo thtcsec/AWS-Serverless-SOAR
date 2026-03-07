@@ -8,6 +8,9 @@ os.environ['SNS_TOPIC_ARN'] = 'arn:aws:sns:us-east-1:123456789012:security-alert
 
 import src.iam_compromise_response as resp
 
+if 'SNS_TOPIC_ARN' in os.environ:
+    del os.environ['SNS_TOPIC_ARN']
+
 def make_event(event_name, source_ip="198.51.100.1", error_code=None):
     detail = {
         "eventName": event_name,

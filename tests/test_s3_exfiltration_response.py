@@ -7,6 +7,9 @@ os.environ['SNS_TOPIC_ARN'] = 'arn:aws:sns:us-east-1:123456789012:security-alert
 
 import src.s3_exfiltration_response as resp
 
+if 'SNS_TOPIC_ARN' in os.environ:
+    del os.environ['SNS_TOPIC_ARN']
+
 def make_event(event_name="GetObject", bucket_name="test-bucket", user_arn="arn:aws:iam::123:user/test"):
     return {
         "detail": {
