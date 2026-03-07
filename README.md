@@ -7,7 +7,7 @@
 
 Automated security incident response platform that detects threats and automatically isolates compromised resources while preserving forensic evidence.
 
-## �️ Architecture Overview
+## Architecture Overview
 
 ### System Architecture
 ```
@@ -121,28 +121,7 @@ gantt
   - `s3_exfiltration_response.py`: S3 data exfiltration detection and response
   - `iam_compromise_response.py`: IAM compromise detection and response
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
-- `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
-
-## 🚀 Deployment Instructions
-
-### Prerequisites
-- [Terraform](https://www.terraform.io/downloads.html) installed locally.
-- AWS CLI installed and configured (`aws configure`).
-
-### Setup
-1. Clone the repository and navigate to the terraform directory:
-   ```bash
-   cd terraform
-   ```
-2. Initialize and Apply Terraform:
-   ```bash
-   terraform init
-   
-   # During apply, it will prompt for the variable: alert_email
-   # Enter your email address to receive SOAR notifications
-   terraform apply
-   ```
-3. **Important:** After the first apply, check the email address you provided. AWS SNS requires you to click a confirmation link to subscribe to the security alerts.
+- `attack_simulation/`: Bash scripts and Python tools to emulate malicious behavior and trigger the SOAR logic.
 
 ## 🛡️ Advanced Features
 
@@ -177,6 +156,25 @@ gantt
 - **Threat intelligence** feeds
 
 ## 🚀 Deployment
+
+### Prerequisites
+- [Terraform](https://www.terraform.io/downloads.html) installed locally.
+- AWS CLI installed and configured (`aws configure`).
+
+### Setup
+1. Clone the repository and navigate to the terraform directory:
+   ```bash
+   cd terraform
+   ```
+2. Initialize and Apply Terraform:
+   ```bash
+   terraform init
+   
+   # During apply, it will prompt for the variable: alert_email
+   # Enter your email address to receive SOAR notifications
+   terraform apply
+   ```
+3. **Important:** After the first apply, check the email address you provided. AWS SNS requires you to click a confirmation link to subscribe to the security alerts.
 
 ### Environment Structure
 ```
