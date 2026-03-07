@@ -108,9 +108,12 @@ def is_unusual_source_ip(source_ip, user_identity):
         known_ips = set()
         
         for event in events:
-            event_source_ip = event.get('CloudTrailEvent', {}).get('sourceIPAddress')
-            if event_source_ip:
-                known_ips.add(event_source_ip)
+            raw_event = event.get('CloudTrailEvent')
+            if raw_event:
+                event_data = json.loads(raw_event)
+                event_source_ip = event_data.get('sourceIPAddress')
+                if event_source_ip:
+                    known_ips.add(event_source_ip)
         
         # If this IP hasn't been seen before, it's unusual
         return source_ip not in known_ips and len(known_ips) > 0
