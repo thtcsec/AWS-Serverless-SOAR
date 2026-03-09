@@ -7,6 +7,8 @@
 
 Automated security incident response platform that detects threats and automatically isolates compromised resources while preserving forensic evidence.
 
+**[🇬🇧 English Architecture Guide](./ARCHITECTURE.md) | [🇻🇳 Bản giải thích tiếng Việt](./ARCHITECTURE_vi.md)**
+
 ## Architecture Overview
 
 ### System Architecture
