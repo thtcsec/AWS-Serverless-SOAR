@@ -50,7 +50,7 @@ def lambda_handler(event, context):
         take_snapshot(instance_id, finding_type)
         stop_instance(instance_id)
         
-        notify_team(instance_id, finding_type)
+        notify_team(instance_id, finding_type, severity)
 
         return {'statusCode': 200, 'body': f'Successfully responded to threat on {instance_id}'}
 
@@ -181,16 +181,26 @@ def tag_instance(instance_id):
         ]
     )
 
-def notify_team(instance_id, finding_type):
+def notify_team(instance_id, finding_type, severity):
+    action_str = "Instance Isolated, IAM Revoked (Sessions Killed), IMDSv2 Enforced, Snapshot Captured, Instance STOPPED."
     message = (
         f"SECURITY ALERT: SOAR Playbook Triggered\n\n"
         f"Instance ID: {instance_id}\n"
         f"Finding: {finding_type}\n"
-        f"Action: Instance Isolated, IAM Revoked (Sessions Killed), IMDSv2 Enforced, Snapshot Captured, Instance STOPPED."
+        f"Severity: {severity}\n"
+        f"Action: {action_str}"
     )
     sns.publish(
         TopicArn=SNS_TOPIC_ARN,
         Subject="AWS Critical Threat Response",
         Message=message
     )
-    logger.info("Alert notification published.")
+    logger.info("Alert notification published via SNS.")
+    
+    # Kick off Jira Integration to generate an ITIL incident ticket
+    try:
+        from integrations.jira import create_jira_issue
+        create_jira_issue(instance_id, finding_type, severity, action_str)
+    except Exception as e:
+        logger.error(f"Failed to invoke Jira integration: {e}")
+
