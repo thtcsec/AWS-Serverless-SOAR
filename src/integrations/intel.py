@@ -1,8 +1,7 @@
 import json
 import os
 import logging
-import urllib.request
-import urllib.parse
+import requests
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -33,11 +32,11 @@ class ThreatIntelService:
         headers = {"x-apikey": self.vt_api_key}
         
         try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode())
-                stats = data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
-                return {
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            stats = data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+            return {
                     "malicious": stats.get('malicious', 0),
                     "suspicious": stats.get('suspicious', 0),
                     "harmless": stats.get('harmless', 0),
@@ -58,8 +57,6 @@ class ThreatIntelService:
             'ipAddress': ip_address,
             'maxAgeInDays': '90'
         }
-        url_params = urllib.parse.urlencode(params)
-        full_url = f"{url}?{url_params}"
         
         headers = {
             'Accept': 'application/json',
@@ -67,11 +64,11 @@ class ThreatIntelService:
         }
         
         try:
-            req = urllib.request.Request(full_url, headers=headers)
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode())
-                attributes = data.get('data', {})
-                return {
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            attributes = data.get('data', {})
+            return {
                     "abuseConfidenceScore": attributes.get('abuseConfidenceScore', 0),
                     "totalReports": attributes.get('totalReports', 0),
                     "lastReportedAt": attributes.get('lastReportedAt')
