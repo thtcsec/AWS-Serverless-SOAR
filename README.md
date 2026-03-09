@@ -121,7 +121,22 @@ gantt
   - `s3_exfiltration_response.py`: S3 data exfiltration detection and response
   - `iam_compromise_response.py`: IAM compromise detection and response
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
-- `attack_simulation/`: Bash scripts and Python tools to emulate malicious behavior and trigger the SOAR logic.
+- `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
+
+## 🥊 Attack Simulator (New!)
+
+To test the SOAR capabilities, a powerful built-in Red Team Docker container is provided.
+You do not need to export credentials manually; the container maps your local AWS credentials automatically.
+
+```bash
+# From the root of this project:
+docker compose run --rm attacker
+```
+
+This will launch an interactive menu allowing you to:
+1. Trigger the EC2 Crypto Miner
+2. Trigger S3 Exfiltration
+3. Trigger IAM SSRF Compromise
 
 ## 🛡️ Advanced Features
 

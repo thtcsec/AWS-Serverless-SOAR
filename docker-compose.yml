@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  attacker:
+    build:
+      context: ./attack_simulation
+      dockerfile: Dockerfile
+    container_name: aws-soar-attacker
+    # Set the environment variable if you don't map the volume
+    # environment:
+    #   - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    #   - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    #   - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+    volumes:
+      # Mount the host .aws directory to pass credentials securely to the container
+      - ~/.aws:/root/.aws:ro
+    stdin_open: true # Equivalent to -i
+    tty: true # Equivalent to -t
