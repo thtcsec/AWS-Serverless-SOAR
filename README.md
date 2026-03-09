@@ -247,8 +247,11 @@ A `.env.example` file is provided in the repository root documenting all OS envi
 # Slack integration
 aws ssm put-parameter --name "/soar/slack/webhook_url" --value "URL" --type "SecureString"
 
-# Jira integration  
+# Jira integration
+aws ssm put-parameter --name "/soar/jira/url" --value "https://your-domain.atlassian.net" --type "String"
+aws ssm put-parameter --name "/soar/jira/user" --value "email@example.com" --type "String"
 aws ssm put-parameter --name "/soar/jira/api_token" --value "TOKEN" --type "SecureString"
+aws ssm put-parameter --name "/soar/jira/project_key" --value "SEC" --type "String"
 
 # SIEM integration
 aws ssm put-parameter --name "/soar/siem/api_key" --value "KEY" --type "SecureString"
