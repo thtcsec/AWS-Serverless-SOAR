@@ -7,7 +7,7 @@ import json
 import os
 import boto3
 import logging
-import requests
+import requests  # type: ignore
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 

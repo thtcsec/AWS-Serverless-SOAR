@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-import requests
+import requests  # type: ignore
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
