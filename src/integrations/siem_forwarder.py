@@ -1,5 +1,5 @@
 """
-Enterprise SOAR - SIEM Integration
+Advanced SOAR - SIEM Integration
 Forwards incident data to SIEM systems (Splunk, Chronicle, Elastic)
 """
 
@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SIEMForwarder:
-    """Enterprise SIEM integration for incident data forwarding"""
+    """Advanced SIEM integration for incident data forwarding"""
     
     def __init__(self):
         self.ssm_client = boto3.client('ssm')
@@ -204,7 +204,7 @@ class SIEMForwarder:
                         'metadata': {
                             'event_type': 'SECURITY_INCIDENT',
                             'product_name': 'SOAR Platform',
-                            'vendor_name': 'Enterprise'
+                            'vendor_name': 'SOAR-Platform'
                         },
                         'principal': {
                             'hostname': event.get('instance_id', 'unknown'),

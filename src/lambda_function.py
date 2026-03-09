@@ -2,6 +2,7 @@ import json
 import os
 import boto3
 import logging
+import src.integrations as integrations
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -39,18 +40,42 @@ def lambda_handler(event, context):
             logger.info(f"Ignoring finding category {finding_type}. Not in critical response list.")
             return {'statusCode': 200, 'body': 'Ignored non-critical finding type'}
 
-        logger.info(f"GuardDuty Action Triggered for Instance: {instance_id} | Severity: {severity} | Type: {finding_type}")
+        # --- THREAT INTEL ENRICHMENT & SCORING ---
+        remote_ip = detail.get('service', {}).get('action', {}).get('networkConnectionAction', {}).get('remoteIpDetails', {}).get('ipAddressV4')
+        
+        risk_data = {"risk_score": 0.0, "decision": "AUTO_ISOLATE"} # Default for non-network findings
+        intel_report = {}
 
-        # Execute SOAR playbook
+        if remote_ip:
+            logger.info(f"Enriching finding with Intel for IP: {remote_ip}")
+            intel_service = integrations.ThreatIntelService()
+            intel_report = intel_service.get_ip_report(remote_ip)
+            
+            scoring_engine = integrations.ScoringEngine()
+            risk_data = scoring_engine.calculate_risk_score(intel_report, severity)
+            
+            logger.info(f"Scoring Result: {json.dumps(risk_data)}")
+            
+            if risk_data['decision'] == "IGNORE":
+                logger.info(f"Risk Score {risk_data['risk_score']} is too low. Skipping remediation.")
+                return {'statusCode': 200, 'body': f"Ignored due to low risk score: {risk_data['risk_score']}"}
+            
+            if risk_data['decision'] == "REQUIRE_APPROVAL":
+                logger.info(f"Risk Score {risk_data['risk_score']} requires manual approval. Notifying team.")
+                notify_team(instance_id, finding_type, severity, risk_data, intel_report, approved=False)
+                return {'statusCode': 200, 'body': 'Pending approval'}
+
+        # --- REMEDIATION ---
+        logger.info(f"Proceeding with AUTO_ISOLATE for Instance: {instance_id}")
         isolate_instance(instance_id)
-        enforce_imdsv2(instance_id)     # Prevent further SSRF metadata theft
-        detach_iam_role(instance_id)    # Detach role permanently
-        revoke_active_sessions(instance_id) # Kill existing cached tokens
-        tag_instance(instance_id)       # Tag as Quarantine before snapshot
+        enforce_imdsv2(instance_id)
+        detach_iam_role(instance_id)
+        revoke_active_sessions(instance_id)
+        tag_instance(instance_id)
         take_snapshot(instance_id, finding_type)
         stop_instance(instance_id)
         
-        notify_team(instance_id, finding_type, severity)
+        notify_team(instance_id, finding_type, severity, risk_data, intel_report, approved=True)
 
         return {'statusCode': 200, 'body': f'Successfully responded to threat on {instance_id}'}
 
@@ -181,26 +206,40 @@ def tag_instance(instance_id):
         ]
     )
 
-def notify_team(instance_id, finding_type, severity):
-    action_str = "Instance Isolated, IAM Revoked (Sessions Killed), IMDSv2 Enforced, Snapshot Captured, Instance STOPPED."
+def notify_team(instance_id, finding_type, severity, risk_data=None, intel_report=None, approved=True):
+    action_status = "AUTOMATED RESPONSE EXECUTED" if approved else "PENDING APPROVAL"
+    action_str = "Instance Isolated, IAM Revoked, Snapshot Captured, STOPPED." if approved else "Waiting for Human-in-the-Loop approval via Slack/Jira."
+    
+    score_info = ""
+    if risk_data:
+        score_info = (
+            f"\nRisk Score: {risk_data['risk_score']}/100\n"
+            f"Decision: {risk_data['decision']}\n"
+            f"VT Malicious: {risk_data['breakdown'].get('vt_malicious')}\n"
+            f"AbuseIPDB Score: {risk_data['breakdown'].get('abuse_confidence')}\n"
+        )
+
     message = (
-        f"SECURITY ALERT: SOAR Playbook Triggered\n\n"
+        f"🚨 SECURITY ALERT: SOAR Playbook ({action_status})\n\n"
         f"Instance ID: {instance_id}\n"
         f"Finding: {finding_type}\n"
         f"Severity: {severity}\n"
-        f"Action: {action_str}"
+        f"{score_info}\n"
+        f"Current Status: {action_str}"
     )
+    
     sns.publish(
         TopicArn=SNS_TOPIC_ARN,
-        Subject="AWS Critical Threat Response",
+        Subject=f"AWS Security Response: {action_status}",
         Message=message
     )
-    logger.info("Alert notification published via SNS.")
+    logger.info(f"Alert notification published ({action_status}).")
     
-    # Kick off Jira Integration to generate an ITIL incident ticket
+    # Update Jira Integration
     try:
         from integrations.jira import create_jira_issue
-        create_jira_issue(instance_id, finding_type, severity, action_str)
+        jira_desc = f"{message}\n\nIntel Details: {json.dumps(intel_report, indent=2)}"
+        create_jira_issue(instance_id, finding_type, severity, jira_desc)
     except Exception as e:
         logger.error(f"Failed to invoke Jira integration: {e}")
 

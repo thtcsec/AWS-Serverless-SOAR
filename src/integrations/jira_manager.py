@@ -1,5 +1,5 @@
 """
-Enterprise SOAR - Jira Integration
+Advanced SOAR - Jira Integration
 Creates and manages Jira tickets for incident response
 """
 
@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class JiraManager:
-    """Enterprise Jira integration for incident ticket management"""
+    """Advanced Jira integration for incident ticket management"""
     
     def __init__(self):
         self.ssm_client = boto3.client('ssm')

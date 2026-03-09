@@ -1,5 +1,5 @@
 """
-Enterprise SOAR - Slack Integration
+Advanced SOAR - Slack Integration
 Sends notifications to Slack channels for incident response
 """
 
@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SlackNotifier:
-    """Enterprise Slack notification system for SOAR"""
+    """Advanced Slack notification system for SOAR"""
     
     def __init__(self):
         self.ssm_client = boto3.client('ssm')

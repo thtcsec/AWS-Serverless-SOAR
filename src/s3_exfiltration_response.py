@@ -2,7 +2,8 @@ import json
 import boto3
 import logging
 import os
-from datetime import datetime, timezone, timedelta, timezone
+from datetime import datetime, timezone, timedelta
+import src.integrations as integrations
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -36,12 +37,36 @@ def lambda_handler(event, context):
         recent_access = get_recent_s3_access(user_arn, bucket_name)
         
         if is_exfiltration_detected(recent_access, event_name):
-            logger.warning(f"Data exfiltration detected from user {user_arn} on bucket {bucket_name}")
+            logger.warning(f"Data exfiltration activity detected from user {user_arn} on bucket {bucket_name}")
             
-            # Execute response playbook
+            # --- THREAT INTEL ENRICHMENT & SCORING ---
+            risk_data = {"risk_score": 0.0, "decision": "AUTO_ISOLATE"}
+            intel_report = {}
+
+            if source_ip:
+                logger.info(f"Enriching S3 finding with Intel for IP: {source_ip}")
+                intel_service = integrations.ThreatIntelService()
+                intel_report = intel_service.get_ip_report(source_ip)
+                
+                scoring_engine = integrations.ScoringEngine()
+                # Initial severity for S3 exfiltration is set to 8.0 (High)
+                risk_data = scoring_engine.calculate_risk_score(intel_report, 8.0)
+                
+                logger.info(f"Scoring Result: {json.dumps(risk_data, default=str)}")
+                
+                if risk_data['decision'] == "IGNORE":
+                    logger.info("Risk Score too low. Skipping remediation.")
+                    return {'statusCode': 200, 'body': 'Ignored low risk'}
+                
+                if risk_data['decision'] == "REQUIRE_APPROVAL":
+                    logger.info("Requires manual approval.")
+                    send_exfiltration_alert(bucket_name, user_arn, source_ip, risk_data, intel_report, approved=False)
+                    return {'statusCode': 200, 'body': 'Pending approval'}
+
+            # Execute response playbook (Decision: AUTO_ISOLATE or High Initial Risk if no IP)
             block_user_access(user_arn, bucket_name)
             enable_s3_protection(bucket_name)
-            send_exfiltration_alert(bucket_name, user_arn, source_ip, recent_access)
+            send_exfiltration_alert(bucket_name, user_arn, source_ip, risk_data, intel_report, approved=True)
             
             return {
                 'statusCode': 200,
@@ -199,33 +224,39 @@ def enable_s3_protection(bucket_name):
     except Exception as e:
         logger.error(f"Error enabling S3 protection: {str(e)}")
 
-def send_exfiltration_alert(bucket_name, user_arn, source_ip, access_data):
-    """Send security alert about data exfiltration attempt"""
-    try:
-        message = f"""
-DATA EXFILTRATION DETECTED
+def send_exfiltration_alert(bucket_name, user_arn, source_ip, risk_data=None, intel_report=None, approved=True):
+    action_status = "AUTOMATED RESPONSE EXECUTED" if approved else "PENDING APPROVAL"
+    
+    score_info = ""
+    if risk_data:
+        score_info = (
+            f"\nRisk Score: {risk_data.get('risk_score')}/100\n"
+            f"Decision: {risk_data.get('decision')}\n"
+            f"VT Malicious: {risk_data.get('breakdown', {}).get('vt_malicious')}\n"
+        )
+
+    message = f"""
+🚨 DATA EXFILTRATION DETECTED ({action_status})
 
 Bucket: {bucket_name}
 User: {user_arn}
 Source IP: {source_ip}
-Access Count: {access_data.get('access_count', 0)}
-Total Bytes: {access_data.get('total_bytes_downloaded', 0)}
+{score_info}
 
-Response Actions Taken:
-- User access blocked via bucket policy
-- S3 protection features enabled
-- Security team notified
-
+Action Status: {"Remediation Applied" if approved else "Waiting for Approval"}
 Time: {datetime.now(timezone.utc).isoformat()}
         """
         
-        sns.publish(
-            TopicArn=SNS_TOPIC_ARN,
-            Subject=f"Data Exfiltration Alert - {bucket_name}",
-            Message=message.strip()
-        )
-        
-        logger.info(f"Exfiltration alert sent for bucket {bucket_name}")
-        
+    sns.publish(
+        TopicArn=SNS_TOPIC_ARN,
+        Subject=f"S3 Security Alert: {action_status}",
+        Message=message.strip()
+    )
+    
+    try:
+        from src.integrations.jira import create_jira_issue
+        jira_desc = f"{message}\n\nIntel Details: {json.dumps(intel_report, indent=2, default=str)}"
+        # Severity 9 for S3 Exfiltration
+        create_jira_issue(bucket_name, f"S3_EXFIL_{user_arn}", 9, jira_desc)
     except Exception as e:
-        logger.error(f"Error sending alert: {str(e)}")
+        logger.error(f"Failed to invoke Jira integration: {e}")

@@ -170,7 +170,8 @@ This will launch an interactive menu allowing you to:
 - **Slack/Teams** for real-time notifications
 - **Jira/ServiceNow** for ticket management
 - **SIEM integration** (Splunk, Chronicle, Elastic)
-- **Threat intelligence** feeds
+- **Threat intelligence** feeds (VirusTotal, AbuseIPDB)
+- **Automated Scoring Engine** for decision-based orchestration
 
 ## 🚀 Deployment
 
@@ -224,12 +225,12 @@ aws ssm put-parameter \
 
 ## 📊 Security Coverage
 
-| Threat Type | Detection | Response Time | Advanced Features |
-|-------------|-----------|---------------|-------------------|
-| EC2 Compromise | GuardDuty | < 30s | Workflow approval, container forensics |
-| S3 Exfiltration | CloudTrail | < 60s | Cross-account response, SIEM integration |
-| IAM Compromise | CloudTrail | < 45s | Multi-project security, ticketing |
-| DDoS Attacks | VPC Flow Logs | < 15s | Queue buffering, auto-scaling |
+| Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
+|-------------|-----------|---------------|---------------|-------------------|
+| EC2 Compromise | GuardDuty | < 30s | Scoring Engine | Workflow approval, container forensics |
+| S3 Exfiltration | CloudTrail | < 60s | Scoring Engine | Multi-Intel enrichment, SIEM integration |
+| IAM Compromise | CloudTrail | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
+| DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
 
 ## 🔧 Configuration
 

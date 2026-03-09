@@ -1,24 +1,31 @@
-# 🧠 Cách thức hoạt động: AWS Serverless SOAR (Bản đơn giản)
+# 🧠 Kiến trúc Nội bộ: AWS Serverless SOAR
 
-Chào bạn! Nếu bạn cảm thấy hệ thống này quá phức tạp, hãy tưởng tượng nó giống như một **Hệ thống An ninh Tòa nhà thông minh**.
+Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết định (Decision-Based Orchestration)**, vượt xa các quy tắc tĩnh đơn giản để tiến tới đánh giá rủi ro thông minh.
 
-## 1. Các thành phần chính (Vai diễn)
+## 1. Các thành phần cốt lõi
 
-*   **GuardDuty (Người Bảo Vệ AI):** Đây là con mắt 24/7. Nó không chỉ nhìn, nó còn "ngửi" thấy mùi nguy hiểm. Nếu nó thấy một máy tính (EC2) đang gởi dữ liệu cho hội đào tiền ảo (Crypto Miner), nó sẽ hét lên: "Finding!".
-*   **EventBridge (Chuông báo động):** Khi GuardDuty hét lên, EventBridge sẽ bắt lấy tín hiệu đó và chuyển đến đúng nơi cần xử lý.
-*   **Lambda Function (Cảnh sát phản ứng nhanh):** Đây là nơi chứa bộ não xử lý (Code Python). Khi nhận được báo động, nó sẽ thức dậy ngay lập tức để ngăn chặn cuộc tấn công.
-*   **SNS/Jira/Slack (Đội thông tin):** Sau khi xử lý xong, nó sẽ báo cáo cho bạn biết chuyện gì đã xảy ra.
+*   **GuardDuty & CloudTrail:** Nguồn dữ liệu cung cấp các phát hiện bảo mật và nhật ký kiểm tra API.
+*   **Lớp Tình báo (Multi-Intel):**
+    *   **VirusTotal:** Tổng hợp báo cáo từ ~70 công cụ diệt mã độc và sandbox để kiểm tra uy tín IP.
+    *   **AbuseIPDB:** Báo cáo thời gian thực từ cộng đồng về các hoạt động brute-force, botnet và quét lỗ hổng.
+*   **Bộ não: Scoring Engine (Bộ máy chấm điểm):**
+    *   Tính toán động `risk_score` (0-100) dựa trên độ tin cậy của tình báo, mức độ nghiêm trọng của phát hiện và bối cảnh lịch sử.
+    *   Đưa ra `decision` (quyết định): `IGNORE` (Bỏ qua), `REQUIRE_APPROVAL` (Cần phê duyệt), hoặc `AUTO_ISOLATE` (Tự động cách ly).
+*   **Lambda Responders:** Các hàm Python xử lý thực thi các kịch bản phản ứng (playbooks) dựa trên quyết định của bộ máy chấm điểm.
+*   **Tích hợp:** Tự động tạo ticket **Jira** và cảnh báo qua **SNS** để con người có thể giám sát.
 
-## 2. Quy trình xử lý khi có "Trộm" (Từng bước)
+## 2. Luồng Phản ứng Nâng cao
 
-1.  **Phát hiện (Detect):** Hacker cài mã độc vào máy EC2 của bạn. GuardDuty phát hiện hành vi gởi dữ liệu ra các hồ đào tiền ảo.
-2.  **Thông báo (Route):** Cảnh báo được đưa vào hàng đợi **SQS** để đảm bảo không tin nhắn nào bị mất, kể cả khi có hàng nghìn vụ tấn công cùng lúc.
-3.  **Hành động (Remediate):** Lambda "Robot" thực hiện 4 việc trong vòng chưa đầy 30 giây:
-    *   **Isolation (Cách ly):** Đổi Security Group về "Deny All". Giống như nhốt kẻ trộm vào phòng kín, cắt hết điện nước và mạng.
-    *   **Snapshot (Lưu bằng chứng):** Chụp ảnh ổ cứng (EBS Snapshot). Đây là bằng chứng pháp y để bạn điều tra sau này.
-    *   **Revoke (Hủy quyền):** Thu hồi ngay lập tức các quyền AWS (IAM Role) mà máy đó đang có, ngăn hacker dùng nó để phá hoại các dịch vụ khác.
-    *   **Stop (Dừng máy):** Tắt máy luôn để tiết kiệm tiền và dừng mã độc.
-4.  **Báo cáo (Report):** Hệ thống tự động tạo **Jira Ticket** và bắn tin nhắn **Slack**. Sáng ra bạn chỉ cần kiểm tra báo cáo: "Mối đe dọa đã được xử lý, đây là bằng chứng."
+1.  **Làm giàu dữ liệu (Enrichment):** Khi nhận cảnh báo, hệ thống ngay lập tức truy vấn nhiều nguồn Tình báo mối đe dọa.
+2.  **Chấm điểm (Scoring):** **Scoring Engine** đánh giá dữ liệu.
+    *   Rủi ro thấp -> **Ghi log & Bỏ qua**.
+    *   Rủi ro trung bình -> **Gửi cảnh báo (Chờ phê duyệt)**.
+    *   Rủi ro cao (VD: IP đã xác nhận độc hại) -> **Tự động khóa lockdown**.
+3.  **Xử lý (Auto-Isolate):**
+    *   **Cách ly mạng:** Khóa chặt các Security Group.
+    *   **Thu hồi quyền:** Vô hiệu hóa các khóa IAM ngay lập tức.
+    *   **Thu thập chứng cứ:** Chụp Snapshot EBS để phục vụ điều tra pháp y.
+4.  **Kiểm tra:** Toàn bộ lịch sử xử lý được gửi lên Jira kèm theo các báo cáo Tình báo để đối soát.
 
 ## 3. Tại sao lại dùng Serverless?
 *   **Tiết kiệm:** Bạn không phải trả tiền nuôi con Robot này hàng tháng. Nó chỉ tốn tiền trong vài giây khi nó thực sự làm việc.

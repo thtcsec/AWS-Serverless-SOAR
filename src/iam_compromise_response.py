@@ -2,7 +2,8 @@ import json
 import boto3
 import logging
 import os
-from datetime import datetime, timezone, timedelta, timezone
+from datetime import datetime, timezone, timedelta
+import src.integrations as integrations
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -22,8 +23,6 @@ ADMIN_ACTIONS = [
 ]
 
 def lambda_handler(event, context):
-    logger.info(f"Received IAM event: {json.dumps(event)}")
-    
     try:
         detail = event.get('detail', {})
         event_name = detail.get('eventName')
@@ -39,29 +38,42 @@ def lambda_handler(event, context):
         username = user_identity.get('userName', 'unknown')
         
         # Analyze the IAM activity
-        risk_score = calculate_risk_score(event_name, user_identity, source_ip, error_code)
+        initial_risk = get_initial_risk_score(event_name, user_identity, source_ip, error_code)
         
-        if risk_score >= 7:  # High risk threshold
-            logger.warning(f"High-risk IAM activity detected: {event_name} by {username} (Score: {risk_score})")
+        risk_data = {"risk_score": 0.0, "decision": "IGNORE", "breakdown": {}}
+        intel_report = {}
+
+        if source_ip:
+            intel_service = integrations.ThreatIntelService()
+            intel_report = intel_service.get_ip_report(source_ip)
             
-            # Execute response playbook
-            investigate_compromise(username, user_arn, event_name, source_ip)
-            quarantine_if_needed(username, user_arn, risk_score)
-            send_security_alert(username, user_arn, event_name, source_ip, risk_score)
+            scoring_engine = integrations.ScoringEngine()
+            # Note: IAM risk score is 0-10, we scale it to match our engine's expectations (or vice versa)
+            risk_data = scoring_engine.calculate_risk_score(intel_report, initial_risk)
             
-            return {
-                'statusCode': 200,
-                'body': f'IAM compromise response executed for user {username}'
-            }
-        
-        return {'statusCode': 200, 'body': 'Low-risk IAM activity detected'}
+            logger.info(f"Scoring Result: {json.dumps(risk_data, default=str)}")
+            
+            if risk_data['decision'] == "IGNORE":
+                logger.info("Risk Score too low. Skipping remediation.")
+                return {'statusCode': 200, 'body': 'Ignored low risk'}
+            
+            if risk_data['decision'] == "REQUIRE_APPROVAL":
+                logger.info("Requires manual approval.")
+                send_security_alert(username, user_arn, event_name, source_ip, risk_data, intel_report, approved=False)
+                return {'statusCode': 200, 'body': 'Pending approval'}
+
+        # Execute response playbook (Decision: AUTO_ISOLATE or High Initial Risk if no IP)
+        investigate_compromise(username, user_arn, event_name, source_ip)
+        quarantine_if_needed(username, user_arn, risk_data, initial_risk)
+        send_security_alert(username, user_arn, event_name, source_ip, risk_data, intel_report, approved=True)
+        return {'statusCode': 200, 'body': 'response executed'}
         
     except Exception as e:
         logger.error(f"Error processing IAM event: {str(e)}")
         return {'statusCode': 500, 'body': f'Error: {str(e)}'}
 
-def calculate_risk_score(event_name, user_identity, source_ip, error_code):
-    """Calculate risk score for IAM activity"""
+def get_initial_risk_score(event_name, user_identity, source_ip, error_code):
+    """Calculate baseline risk score for IAM activity (0-10 scale)"""
     score = 0
     
     # Base score for action type
@@ -236,22 +248,25 @@ def check_concurrent_sessions(username):
         logger.error(f"Error checking concurrent sessions: {str(e)}")
         return 0
 
-def quarantine_if_needed(username, user_arn, risk_score):
-    """Quarantine user if compromise is confirmed"""
+def quarantine_if_needed(username, user_arn, risk_data, initial_score):
+    """Quarantine user based on decision or very high baseline risk"""
     try:
-        if risk_score >= 8:  # Very high risk
-            logger.info(f"Quarantining user {username} due to high risk score: {risk_score}")
+        # Check decision from engine OR fallback to high initial score if engine was bypassed
+        should_quarantine = (risk_data.get('decision') == "AUTO_ISOLATE" or initial_score >= 7)
+        
+        if should_quarantine:
+            logger.info(f"Quarantining user {username} (Score: {risk_data.get('risk_score', initial_score)})")
             
             # Disable user's access keys
             disable_user_access_keys(username)
-            
             # Remove user from privileged groups
             remove_from_privileged_groups(username)
-            
-            # Enable MFA if not already enabled
+            # Enable MFA
             enforce_mfa(username)
             
             logger.info(f"User {username} quarantined successfully")
+        else:
+            logger.info(f"Quarantine not required for {username}")
             
     except Exception as e:
         logger.error(f"Error quarantining user: {str(e)}")
@@ -307,45 +322,44 @@ def enforce_mfa(username):
     except Exception as e:
         logger.error(f"Error enforcing MFA: {str(e)}")
 
-def send_security_alert(username, user_arn, event_name, source_ip, risk_score):
-    """Send security alert about IAM compromise"""
-    try:
-        message = f"""
-IAM COMPROMISE DETECTED
+def send_security_alert(username, user_arn, event_name, source_ip, risk_data=None, intel_report=None, approved=True):
+    action_status = "AUTOMATED RESPONSE EXECUTED" if approved else "PENDING APPROVAL"
+    
+    score_info = ""
+    if risk_data:
+        score_info = (
+            f"\nRisk Score: {risk_data.get('risk_score')}/100\n"
+            f"Decision: {risk_data.get('decision')}\n"
+            f"VT Malicious: {risk_data.get('breakdown', {}).get('vt_malicious')}\n"
+        )
+
+    message = f"""
+🚨 IAM COMPROMISE DETECTED ({action_status})
 
 Username: {username}
 User ARN: {user_arn}
 Action: {event_name}
 Source IP: {source_ip}
-Risk Score: {risk_score}/10
-
-Investigation Results:
-- Recent activity analysis completed
-- Failed login attempts checked
-- Concurrent sessions monitored
-
-Response Actions Taken:
-- Access keys disabled (if high risk)
-- Removed from privileged groups (if applicable)
-- MFA enforcement initiated
-- Security team notified
-
-Time: {datetime.now(timezone.utc).isoformat()}
+{score_info}
 
 Next Steps:
 1. Verify user identity through out-of-band channel
 2. Review all recent IAM changes
-3. Consider password reset
-4. Monitor for additional suspicious activity
+3. Monitor for additional suspicious activity
         """
         
+    try:
         sns.publish(
             TopicArn=SNS_TOPIC_ARN,
-            Subject=f"IAM Compromise Alert - {username}",
+            Subject=f"IAM Security Alert: {action_status}",
             Message=message.strip()
         )
-        
-        logger.info(f"IAM compromise alert sent for user {username}")
-        
     except Exception as e:
-        logger.error(f"Error sending alert: {str(e)}")
+        logger.error(f"Failed to send SNS alert: {e}")
+    
+    try:
+        from src.integrations.jira import create_jira_issue
+        jira_desc = f"{message}\n\nIntel Details: {json.dumps(intel_report, indent=2, default=str)}"
+        create_jira_issue(username, f"IAM_{event_name}", 8, jira_desc)
+    except Exception as e:
+        logger.error(f"Failed to invoke Jira integration: {e}")
