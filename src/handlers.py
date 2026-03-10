@@ -3,12 +3,12 @@ from src.core.logger import logger
 from src.playbooks.registry import registry
 from src.playbooks.ec2_containment import EC2ContainmentPlaybook
 from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-# from src.playbooks.iam_compromise import IAMCompromisePlaybook
+from src.playbooks.iam_compromise import IAMCompromisePlaybook
 
 # Register all playbooks on startup
 registry.register(EC2ContainmentPlaybook())
 registry.register(S3ExfiltrationPlaybook())
-# registry.register(IAMCompromisePlaybook())
+registry.register(IAMCompromisePlaybook())
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Entry point for AWS Lambda to trigger the SOAR Engine."""
