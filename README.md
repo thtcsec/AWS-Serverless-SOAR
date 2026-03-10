@@ -122,6 +122,11 @@ gantt
   - `lambda_function.py`: Main EC2 incident response playbook
   - `s3_exfiltration_response.py`: S3 data exfiltration detection and response
   - `iam_compromise_response.py`: IAM compromise detection and response
+  - `core/event_normalizer.py`: Unified event normalization (→ `UnifiedIncident`)
+  - `core/correlator.py`: Cross-cloud incident correlation engine
+  - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
+  - `integrations/scoring.py`: Risk scoring engine with anomaly boost
+  - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
 
@@ -172,6 +177,17 @@ This will launch an interactive menu allowing you to:
 - **SIEM integration** (Splunk, Chronicle, Elastic)
 - **Threat intelligence** feeds (VirusTotal, AbuseIPDB)
 - **Automated Scoring Engine** for decision-based orchestration
+
+### Multi-Cloud Orchestration
+- **Unified Event Normalizer** converts GuardDuty/CloudTrail events into a standard `UnifiedIncident` schema
+- **Incident Correlator** groups related alerts by shared IOCs (IP, actor, ±5 min time window)
+- **Campaign Detection** via BFS clustering for multi-stage attack identification
+
+### AI/ML Anomaly Detection
+- **Isolation Forest** model for behavioral anomaly detection
+- **Z-Score Fallback** when ML model is not yet trained
+- **Feature Vector**: `hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`
+- **Enhanced Scoring**: anomaly boost (+15) automatically raises risk level
 
 ## 🚀 Deployment
 
