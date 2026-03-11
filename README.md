@@ -134,7 +134,7 @@ gantt
   - `modules/monitoring/`: CloudWatch Dashboard and Alarms
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
 
-## 🥊 Attack Simulator (New!)
+## 🥊 Attack Simulator
 
 To test the SOAR capabilities, a powerful built-in Red Team Docker container is provided.
 You do not need to export credentials manually; the container maps your local AWS credentials automatically.
@@ -216,6 +216,11 @@ This will launch an interactive menu allowing you to:
 - **SSM Parameter Store rotation** with audit trail
 - **90-day rotation policy** with configurable thresholds
 - **Rotation report** for compliance dashboards
+
+### GenAI Incident Summarization (Amazon Bedrock)
+- **AI-powered alert summaries** via Claude 3 Haiku injected into Slack notifications
+- **Automatic fallback** to rule-based templates when Bedrock is unavailable
+- **Actionable context**: what happened, affected resource, severity, recommended next step
 
 ## 🚀 Deployment
 

@@ -124,6 +124,21 @@ class SlackNotifier:
                 if threat_fields:
                     message["attachments"][0]["fields"].extend(threat_fields)
             
+            # Inject AI-generated summary
+            try:
+                from src.integrations.ai_summarizer import AISummarizer
+                ai = AISummarizer()
+                ai_result = ai.summarize_incident(incident_data)
+                ai_summary = ai_result.get("summary", "")
+                if ai_summary:
+                    message["attachments"][0]["fields"].append({
+                        "title": "🤖 AI Analysis",
+                        "value": ai_summary,
+                        "short": False
+                    })
+            except Exception as ai_err:
+                logger.warning(f"AI summarizer unavailable: {ai_err}")
+
             response = self._send_slack_message(message)
             
             return {
