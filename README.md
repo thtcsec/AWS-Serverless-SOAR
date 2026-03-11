@@ -1,8 +1,13 @@
+<p align="center">
+  <img src="docs/soar_logo.png" alt="SOAR Logo" width="640">
+</p>
+
 # 🚀 AWS Serverless Security Orchestration, Automation, and Response (SOAR)
 
 ![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Checkov](https://img.shields.io/badge/Checkov-IaC%20Scan-blueviolet?style=for-the-badge)
 ![Serverless](https://img.shields.io/badge/serverless-%23FD5750.svg?style=for-the-badge&logo=serverless&logoColor=white)
 
 Automated security incident response platform that detects threats and automatically isolates compromised resources while preserving forensic evidence.
