@@ -88,7 +88,7 @@ class ReportGenerator:
         incident_data: Dict[str, Any],
         actions: Optional[List[Dict[str, str]]] = None,
         recommendations: Optional[List[str]] = None,
-        output_dir: str = "/tmp/soar_reports",
+        output_dir: str = "",
     ) -> Dict[str, Any]:
         """
         Generate a Markdown incident report.
@@ -97,11 +97,15 @@ class ReportGenerator:
             incident_data: UnifiedIncident dict or raw finding.
             actions: List of automated actions taken.
             recommendations: List of recommendation strings.
-            output_dir: Directory to save the report.
+            output_dir: Directory to save the report. Defaults to system temp dir.
 
         Returns:
             Dict with 'report_path' and 'report_content'.
         """
+        import tempfile
+        if not output_dir:
+            output_dir = os.path.join(tempfile.gettempdir(), "soar_reports")
+
         now = datetime.now(timezone.utc)
         report_id = f"IR-{now.strftime('%Y%m%d-%H%M%S')}"
 
