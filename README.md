@@ -219,24 +219,9 @@ This will launch an interactive menu allowing you to:
 
 ## 🚀 Deployment
 
-### Prerequisites
-- [Terraform](https://www.terraform.io/downloads.html) installed locally.
-- AWS CLI installed and configured (`aws configure`).
+We provide a fully automated deployment script for the entire platform.
 
-### Setup
-1. Clone the repository and navigate to the terraform directory:
-   ```bash
-   cd terraform
-   ```
-2. Initialize and Apply Terraform:
-   ```bash
-   terraform init
-   
-   # During apply, it will prompt for the variable: alert_email
-   # Enter your email address to receive SOAR notifications
-   terraform apply
-   ```
-3. **Important:** After the first apply, check the email address you provided. AWS SNS requires you to click a confirmation link to subscribe to the security alerts.
+**👉 Please see the comprehensive [Deployment Guide (Deployment.md)](./Deployment.md) for full pre-requisites, step-by-step instructions, and troubleshooting.**
 
 ### Environment Structure
 ```
@@ -254,17 +239,17 @@ terraform/
 └── global/                    # Global resources and state
 ```
 
-### Quick Deploy
+### TL;DR Quick Deploy
 ```bash
-# Deploy SOAR platform
-cd aws-serverless-soar
-./scripts/deploy.sh prod
+# 1. Clone the repository
+git clone https://github.com/thtcsec/AWS-Serverless-SOAR.git
+cd AWS-Serverless-SOAR
 
-# Configure integrations
-aws ssm put-parameter \
-  --name "/soar/slack/webhook_url" \
-  --value "${SLACK_WEBHOOK_URL}" \
-  --type "SecureString"
+# 2. Run the deployment script (deploys Terraform, builds Fargate containers, sets up SSM)
+./scripts/deploy.sh prod deploy
+
+# 3. Configure Integrations (Slack/Jira)
+aws ssm put-parameter --name "/soar/slack/webhook_url" --value "YOUR_WEBHOOK_URL" --type "SecureString"
 ```
 
 ## 📊 Security Coverage
