@@ -127,7 +127,7 @@ class AttackForecaster:
 
     def _build_risk_heatmap(self) -> Dict[str, Dict[str, Any]]:
         """Build a heatmap of which resource types are most targeted."""
-        resource_counts: Dict[str, int] = Counter()
+        resource_counts: Counter[str] = Counter()
         resource_severity: Dict[str, List[int]] = {}
         severity_map = {
             "CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0,
