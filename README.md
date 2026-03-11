@@ -276,6 +276,20 @@ aws ssm put-parameter --name "/soar/jira/project_key" --value "SEC" --type "Stri
 aws ssm put-parameter --name "/soar/siem/api_key" --value "KEY" --type "SecureString"
 ```
 
+## 💰 Cost Estimation
+
+Since this platform is built entirely on native Serverless architecture, the cost is heavily optimized and strictly **pay-as-you-go**. There is virtually zero idle cost.
+
+### Estimated Monthly Cost (Low/Moderate Traffic): `~$5 - $15 / month`
+- **AWS GuardDuty:** Priced per GB of VPC Flow Logs / CloudTrail events analyzed. For a small/medium environment, this is usually under **$5-10/month**.
+- **AWS Step Functions:** 4,000 free state transitions per month. After that, \$0.025 per 1,000 standard transitions. SOAR workflows only trigger on critical findings, so cost is negligible (**< $1/month**).
+- **AWS Lambda:** 1 Million free requests/month. You will likely never exceed the free tier for SOAR actions (**$0**).
+- **AWS SQS / EventBridge:** Both offer massive free tiers (1+ Million events). Usage for this platform is negligible (**$0**).
+- **AWS ECS Fargate:** Billed per second of compute for forensics tasks. Since tasks only spin up during an incident and run for ~5-15 mins, cost is extremely low (**< $2/month**).
+- **Threat Intel (VirusTotal/AbuseIPDB):** Free Community API keys limit queries to ~500-1000/day. More than enough for SOAR alerts (**$0**).
+
+*Note: Enabling Multi-Account organizational trails or operating in a high-attack-volume environment will scale costs up proportionally to log volume.*
+
 ## 📄 License
 
 This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
