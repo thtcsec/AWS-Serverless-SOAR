@@ -129,7 +129,9 @@ gantt
   - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
   - `core/process_containment.py`: Process-level containment via SSM Run Command
   - `core/audit_logger.py`: Structured audit trail with CloudWatch/S3 archival
+  - `core/secret_rotation.py`: API key rotation manager (90-day policy)
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
+  - `modules/monitoring/`: CloudWatch Dashboard and Alarms
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
 
 ## 🥊 Attack Simulator (New!)
@@ -202,6 +204,18 @@ This will launch an interactive menu allowing you to:
 - **CloudWatch Logs** integration for real-time audit streaming
 - **S3 archival** for long-term audit retention and compliance
 - **Filterable audit queries** by resource, action type, or time range
+
+### Monitoring & Observability (Terraform)
+- **CloudWatch Dashboard** with incident volume, error rate, MTTR, SQS depth
+- **CloudWatch Alarms** for Lambda errors and DLQ backlogs
+- **Step Functions execution tracking** (success/fail/timeout)
+- **SLO/SLI metrics** for playbook success rate
+
+### Secret Rotation
+- **Automated key age detection** for all SOAR API keys
+- **SSM Parameter Store rotation** with audit trail
+- **90-day rotation policy** with configurable thresholds
+- **Rotation report** for compliance dashboards
 
 ## 🚀 Deployment
 
