@@ -127,6 +127,8 @@ gantt
   - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
   - `integrations/scoring.py`: Risk scoring engine with anomaly boost
   - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
+  - `core/process_containment.py`: Process-level containment via SSM Run Command
+  - `core/audit_logger.py`: Structured audit trail with CloudWatch/S3 archival
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
 
@@ -188,6 +190,18 @@ This will launch an interactive menu allowing you to:
 - **Z-Score Fallback** when ML model is not yet trained
 - **Feature Vector**: `hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`
 - **Enhanced Scoring**: anomaly boost (+15) automatically raises risk level
+
+### Process-Level Containment (SSM)
+- **Kill malicious processes** directly on EC2 via SSM Run Command
+- **Quarantine suspicious files** to `/var/quarantine`
+- **Suspicious process detection** (xmrig, cryptominer, kinsing, etc.)
+- **Containment hierarchy**: Function > Process > Permissions > Network
+
+### Audit Trail & Compliance
+- **Immutable audit logging** for all SOAR actions (containment, scoring, approvals)
+- **CloudWatch Logs** integration for real-time audit streaming
+- **S3 archival** for long-term audit retention and compliance
+- **Filterable audit queries** by resource, action type, or time range
 
 ## 🚀 Deployment
 
