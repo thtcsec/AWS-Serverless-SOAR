@@ -7,6 +7,7 @@ import json
 import os
 import boto3
 import logging
+import re
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
@@ -16,6 +17,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+DEFAULT_ENVIRONMENTS = ('dev', 'staging', 'prod')
+ACCOUNT_ID_PATTERN = re.compile(r'^\d{12}$')
+ROLE_NAME_PATTERN = re.compile(r'^[\w+=,.@/-]{1,64}$')
 
 class CrossAccountResponder:
     """Enterprise cross-account incident response handler"""
@@ -23,22 +27,56 @@ class CrossAccountResponder:
     def __init__(self):
         self.sts_client = boto3.client('sts')
         self.external_id = os.environ.get('CROSS_ACCOUNT_EXTERNAL_ID', 'soar-cross-account-2024')
-        
-        # Account configurations
-        self.account_configs = {
+        self.strict_config = os.environ.get('CROSS_ACCOUNT_STRICT_CONFIG', 'false').lower() == 'true'
+        self.account_configs = self._load_account_configs()
+        self._validate_account_configs()
+
+    def _load_account_configs(self):
+        account_configs = {
             'dev': {
-                'account_id': os.environ.get('DEV_ACCOUNT_ID'),
-                'role_name': os.environ.get('DEV_SOAR_ROLE_NAME', 'soar-cross-account-responder')
+                'account_id': os.environ.get('DEV_ACCOUNT_ID', '').strip(),
+                'role_name': os.environ.get('DEV_SOAR_ROLE_NAME', 'soar-cross-account-responder').strip()
             },
             'staging': {
-                'account_id': os.environ.get('STAGING_ACCOUNT_ID'),
-                'role_name': os.environ.get('STAGING_SOAR_ROLE_NAME', 'soar-cross-account-responder')
+                'account_id': os.environ.get('STAGING_ACCOUNT_ID', '').strip(),
+                'role_name': os.environ.get('STAGING_SOAR_ROLE_NAME', 'soar-cross-account-responder').strip()
             },
             'prod': {
-                'account_id': os.environ.get('PROD_ACCOUNT_ID'),
-                'role_name': os.environ.get('PROD_SOAR_ROLE_NAME', 'soar-cross-account-responder')
+                'account_id': os.environ.get('PROD_ACCOUNT_ID', '').strip(),
+                'role_name': os.environ.get('PROD_SOAR_ROLE_NAME', 'soar-cross-account-responder').strip()
             }
         }
+        raw_map = os.environ.get('CROSS_ACCOUNT_MAP', '').strip()
+        if raw_map:
+            parsed = json.loads(raw_map)
+            if not isinstance(parsed, dict):
+                raise ValueError('CROSS_ACCOUNT_MAP must be a JSON object')
+            for env, cfg in parsed.items():
+                if isinstance(cfg, dict):
+                    account_configs[env] = {
+                        'account_id': str(cfg.get('account_id', '')).strip(),
+                        'role_name': str(cfg.get('role_name', 'soar-cross-account-responder')).strip() or 'soar-cross-account-responder'
+                    }
+        return account_configs
+
+    def _validate_account_configs(self):
+        issues = []
+        for env, cfg in self.account_configs.items():
+            account_id = str(cfg.get('account_id', '')).strip()
+            role_name = str(cfg.get('role_name', '')).strip()
+            if not account_id and not role_name:
+                continue
+            if account_id and not ACCOUNT_ID_PATTERN.match(account_id):
+                issues.append(f"{env}: invalid account_id format")
+            if role_name and not ROLE_NAME_PATTERN.match(role_name):
+                issues.append(f"{env}: invalid role_name format")
+            if account_id and not role_name:
+                issues.append(f"{env}: role_name missing")
+        if issues:
+            message = 'Cross-account config validation failed: ' + '; '.join(issues)
+            if self.strict_config:
+                raise ValueError(message)
+            logger.warning(message)
     
     def assume_cross_account_role(self, account_name):
         """
@@ -52,8 +90,10 @@ class CrossAccountResponder:
         """
         try:
             config = self.account_configs.get(account_name)
-            if not config or not config['account_id']:
+            if not config or not config.get('account_id'):
                 raise ValueError(f"Account {account_name} not configured")
+            if not config.get('role_name'):
+                raise ValueError(f"Account {account_name} role_name not configured")
             
             role_arn = f"arn:aws:iam::{config['account_id']}:role/{config['role_name']}"
             

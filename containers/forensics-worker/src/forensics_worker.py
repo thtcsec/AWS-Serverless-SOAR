@@ -12,6 +12,7 @@ from flask import Flask, request, jsonify
 import threading
 import time
 import hashlib
+import re
 from botocore.exceptions import ClientError
 
 # Configure logging
@@ -33,6 +34,43 @@ sns_client = boto3.client('sns')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'production')
 S3_BUCKET = os.environ.get('FORENSICS_S3_BUCKET')
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
+FORENSICS_SCAN_ROOT = os.environ.get('FORENSICS_SCAN_ROOT', '/forensics')
+FORENSICS_LOOKBACK_DAYS = int(os.environ.get('FORENSICS_LOOKBACK_DAYS', '7'))
+FORENSICS_MAX_FILE_SIZE = int(os.environ.get('FORENSICS_MAX_FILE_SIZE', str(5 * 1024 * 1024)))
+FORENSICS_LOG_MAX_LINES = int(os.environ.get('FORENSICS_LOG_MAX_LINES', '2000'))
+KNOWN_MALICIOUS_HASHES = {
+    h.strip().lower()
+    for h in os.environ.get('FORENSICS_KNOWN_BAD_HASHES', '').split(',')
+    if h.strip()
+}
+SUSPICIOUS_NAME_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r'xmrig',
+        r'kdevtmpfsi',
+        r'kinsing',
+        r'cryptominer',
+        r'backdoor',
+        r'webshell',
+        r'\.ssh/authorized_keys(\.bak)?$',
+    ]
+]
+SUSPICIOUS_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r'nc\s+-e',
+        r'bash\s+-i',
+        r'curl\s+http',
+        r'wget\s+http',
+        r'/dev/tcp/',
+        r'chmod\s+\+x',
+        r'base64\s+-d',
+        r'python\s+-c',
+        r'powershell\s+-enc',
+    ]
+]
+IP_PATTERN = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+DOMAIN_PATTERN = re.compile(r'\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+\b')
 
 class ForensicsWorker:
     """Enterprise-grade forensics worker with comprehensive analysis capabilities"""
@@ -80,7 +118,7 @@ class ForensicsWorker:
                     snapshot_analysis[snapshot_id] = analysis
             
             # Step 3: Perform threat intelligence lookup
-            threat_intel = self._perform_threat_intel_lookup(instance_id, operation_id)
+            threat_intel = self._perform_threat_intel_lookup(instance_id, operation_id, snapshot_analysis)
             
             # Step 4: Generate forensic report
             report = self._generate_forensic_report(
@@ -202,17 +240,11 @@ class ForensicsWorker:
                 'tags': {tag['Key']: tag['Value'] for tag in snapshot.get('Tags', [])}
             }
             
-            # Simulate file system analysis
-            # In a real implementation, you would:
-            # 1. Create volume from snapshot
-            # 2. Mount volume
-            # 3. Run file system analysis tools
-            # 4. Scan for malware
-            # 5. Look for suspicious files and activities
-            
-            analysis['file_system_analysis'] = self._simulate_filesystem_analysis()
-            analysis['malware_scan'] = self._simulate_malware_scan()
-            analysis['suspicious_activities'] = self._simulate_activity_analysis()
+            snapshot_path = self._resolve_snapshot_scan_path(snapshot_id)
+            analysis['scan_path'] = snapshot_path
+            analysis['file_system_analysis'] = self._simulate_filesystem_analysis(snapshot_path)
+            analysis['malware_scan'] = self._simulate_malware_scan(snapshot_path)
+            analysis['suspicious_activities'] = self._simulate_activity_analysis(snapshot_path)
             
             # Calculate overall risk score
             risk_score = self._calculate_snapshot_risk_score(analysis)
@@ -225,71 +257,178 @@ class ForensicsWorker:
             self._log_step(operation_id, 'analyze_snapshot', 'failed', str(e))
             raise
     
-    def _simulate_filesystem_analysis(self):
-        """Simulate file system analysis (placeholder for real implementation)"""
-        return {
-            'total_files': 15420,
-            'suspicious_files': 3,
-            'hidden_files': 12,
-            'recently_modified_files': 45,
-            'file_types_found': {
-                'executables': 234,
-                'scripts': 89,
-                'configuration': 156,
-                'logs': 1245,
-                'temp_files': 892
-            },
-            'suspicious_file_locations': [
-                '/tmp/backdoor.exe',
-                '/var/www/.hidden/shell.php',
-                '/home/ec2-user/.ssh/authorized_keys.bak'
-            ]
-        }
-    
-    def _simulate_malware_scan(self):
-        """Simulate malware scan (placeholder for real implementation)"""
-        return {
-            'scanned_files': 15420,
-            'malware_detected': 2,
-            'threats_found': [
-                {
-                    'file': '/tmp/backdoor.exe',
-                    'threat_type': 'Trojan.Generic',
-                    'severity': 'high',
-                    'hash': 'a1b2c3d4e5f6...'
+    def _resolve_snapshot_scan_path(self, snapshot_id):
+        candidate = os.path.join(FORENSICS_SCAN_ROOT, snapshot_id)
+        if os.path.isdir(candidate):
+            return candidate
+        if os.path.isdir(FORENSICS_SCAN_ROOT):
+            return FORENSICS_SCAN_ROOT
+        return ''
+
+    def _simulate_filesystem_analysis(self, snapshot_path):
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            return {
+                'scan_mode': 'filesystem',
+                'scan_path': snapshot_path,
+                'path_exists': False,
+                'total_files': 0,
+                'suspicious_files': 0,
+                'hidden_files': 0,
+                'recently_modified_files': 0,
+                'file_types_found': {
+                    'executables': 0,
+                    'scripts': 0,
+                    'configuration': 0,
+                    'logs': 0,
+                    'temp_files': 0
                 },
-                {
-                    'file': '/var/www/.hidden/shell.php',
-                    'threat_type': 'WebShell',
-                    'severity': 'critical',
-                    'hash': 'f6e5d4c3b2a1...'
-                }
-            ],
-            'scan_duration_seconds': 245
-        }
-    
-    def _simulate_activity_analysis(self):
-        """Simulate suspicious activity analysis"""
-        return [
-            {
-                'type': 'unusual_network_connections',
-                'description': 'Connections to known C2 servers detected',
-                'severity': 'high',
-                'evidence': ['192.168.1.100:443 -> 185.14.28.56:8080']
-            },
-            {
-                'type': 'privilege_escalation',
-                'description': 'Evidence of sudo abuse detected',
-                'severity': 'medium',
-                'evidence': ['/var/log/auth.log entries']
-            },
-            {
-                'type': 'data_exfiltration',
-                'description': 'Large file transfers to external IP',
-                'severity': 'high',
-                'evidence': ['/var/log/nginx/access.log patterns']
+                'suspicious_file_locations': []
             }
-        ]
+
+        now = time.time()
+        extension_map = {
+            'executables': {'.exe', '.dll', '.so', '.bin'},
+            'scripts': {'.sh', '.py', '.pl', '.ps1', '.bat'},
+            'configuration': {'.conf', '.ini', '.yaml', '.yml', '.json', '.xml'},
+            'logs': {'.log'},
+            'temp_files': {'.tmp', '.swp', '.temp'},
+        }
+        result = {
+            'scan_mode': 'filesystem',
+            'scan_path': snapshot_path,
+            'path_exists': True,
+            'total_files': 0,
+            'suspicious_files': 0,
+            'hidden_files': 0,
+            'recently_modified_files': 0,
+            'file_types_found': {k: 0 for k in extension_map},
+            'suspicious_file_locations': []
+        }
+        for root, _, files in os.walk(snapshot_path):
+            for file_name in files:
+                result['total_files'] += 1
+                full_path = os.path.join(root, file_name)
+                rel_path = os.path.relpath(full_path, snapshot_path)
+                lowered_name = file_name.lower()
+                if lowered_name.startswith('.'):
+                    result['hidden_files'] += 1
+                try:
+                    stat_result = os.stat(full_path)
+                    if now - stat_result.st_mtime <= FORENSICS_LOOKBACK_DAYS * 86400:
+                        result['recently_modified_files'] += 1
+                except OSError:
+                    pass
+                ext = os.path.splitext(lowered_name)[1]
+                for bucket, ext_set in extension_map.items():
+                    if ext in ext_set:
+                        result['file_types_found'][bucket] += 1
+                if any(pattern.search(rel_path) for pattern in SUSPICIOUS_NAME_PATTERNS):
+                    result['suspicious_files'] += 1
+                    result['suspicious_file_locations'].append(rel_path)
+        return result
+    
+    def _simulate_malware_scan(self, snapshot_path):
+        start = time.time()
+        scan_result = {
+            'scan_mode': 'hash-signature',
+            'scan_path': snapshot_path,
+            'path_exists': bool(snapshot_path and os.path.isdir(snapshot_path)),
+            'scanned_files': 0,
+            'skipped_files': 0,
+            'malware_detected': 0,
+            'threats_found': [],
+            'scan_duration_seconds': 0
+        }
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            return scan_result
+
+        for root, _, files in os.walk(snapshot_path):
+            for file_name in files:
+                full_path = os.path.join(root, file_name)
+                rel_path = os.path.relpath(full_path, snapshot_path)
+                try:
+                    if os.path.getsize(full_path) > FORENSICS_MAX_FILE_SIZE:
+                        scan_result['skipped_files'] += 1
+                        continue
+                    with open(full_path, 'rb') as f:
+                        content = f.read()
+                    scan_result['scanned_files'] += 1
+                    file_hash = hashlib.sha256(content).hexdigest()
+                    lowered_name = file_name.lower()
+                    threat = None
+                    if file_hash in KNOWN_MALICIOUS_HASHES:
+                        threat = {
+                            'file': rel_path,
+                            'threat_type': 'KnownMaliciousHash',
+                            'severity': 'critical',
+                            'hash': file_hash,
+                            'reason': 'sha256 matched known malicious hash'
+                        }
+                    elif any(pattern.search(rel_path) for pattern in SUSPICIOUS_NAME_PATTERNS):
+                        threat = {
+                            'file': rel_path,
+                            'threat_type': 'SuspiciousFilename',
+                            'severity': 'high',
+                            'hash': file_hash,
+                            'reason': 'filename matched suspicious pattern'
+                        }
+                    elif lowered_name.endswith(('.sh', '.py', '.ps1', '.bat')):
+                        text = content[:4096].decode(errors='ignore')
+                        if any(pattern.search(text) for pattern in SUSPICIOUS_COMMAND_PATTERNS):
+                            threat = {
+                                'file': rel_path,
+                                'threat_type': 'SuspiciousScriptBehavior',
+                                'severity': 'high',
+                                'hash': file_hash,
+                                'reason': 'script contains suspicious command patterns'
+                            }
+                    if threat:
+                        scan_result['threats_found'].append(threat)
+                except (OSError, UnicodeDecodeError):
+                    scan_result['skipped_files'] += 1
+        scan_result['malware_detected'] = len(scan_result['threats_found'])
+        scan_result['scan_duration_seconds'] = int(time.time() - start)
+        return scan_result
+    
+    def _simulate_activity_analysis(self, snapshot_path):
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            return []
+        findings = []
+        for root, _, files in os.walk(snapshot_path):
+            for file_name in files:
+                if not file_name.lower().endswith('.log'):
+                    continue
+                log_path = os.path.join(root, file_name)
+                rel_path = os.path.relpath(log_path, snapshot_path)
+                evidence = []
+                detected_ips = set()
+                detected_domains = set()
+                try:
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as log_file:
+                        for idx, line in enumerate(log_file):
+                            if idx >= FORENSICS_LOG_MAX_LINES:
+                                break
+                            if any(pattern.search(line) for pattern in SUSPICIOUS_COMMAND_PATTERNS):
+                                evidence.append(line.strip()[:220])
+                            for ip in IP_PATTERN.findall(line):
+                                if not ip.startswith(('10.', '127.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.', '172.2', '172.30.', '172.31.')):
+                                    detected_ips.add(ip)
+                            for domain in DOMAIN_PATTERN.findall(line):
+                                lowered = domain.lower()
+                                if '.' in lowered and lowered not in {'localhost', 'amazonaws.com'}:
+                                    detected_domains.add(lowered)
+                except OSError:
+                    continue
+                if evidence or detected_ips or detected_domains:
+                    findings.append({
+                        'type': 'suspicious_log_activity',
+                        'description': f'Suspicious runtime activity found in {rel_path}',
+                        'severity': 'high' if evidence else 'medium',
+                        'evidence': evidence[:10],
+                        'ips': sorted(detected_ips),
+                        'domains': sorted(detected_domains)
+                    })
+        return findings
     
     def _calculate_snapshot_risk_score(self, analysis):
         """Calculate overall risk score for snapshot"""
@@ -309,7 +448,7 @@ class ForensicsWorker:
         
         return min(base_score, 100)  # Cap at 100
     
-    def _perform_threat_intel_lookup(self, instance_id, operation_id):
+    def _perform_threat_intel_lookup(self, instance_id, operation_id, snapshot_analysis=None):
         """Perform threat intelligence lookups"""
         try:
             threat_intel = {
@@ -318,30 +457,43 @@ class ForensicsWorker:
                 'indicators': [],
                 'reputations': {}
             }
-            
-            # Simulate threat intelligence lookups
-            # In a real implementation, you would query:
-            # - VirusTotal for file hashes
-            # - AbuseIPDB for IP addresses
-            # - MISP for IOCs
-            # - Internal threat feeds
-            
-            threat_intel['indicators'] = [
-                {
+
+            snapshot_analysis = snapshot_analysis or {}
+            known_ips = set()
+            known_domains = set()
+            known_hashes = set()
+            for analysis in snapshot_analysis.values():
+                for threat in analysis.get('malware_scan', {}).get('threats_found', []):
+                    if threat.get('hash'):
+                        known_hashes.add(threat['hash'])
+                for activity in analysis.get('suspicious_activities', []):
+                    known_ips.update(activity.get('ips', []))
+                    known_domains.update(activity.get('domains', []))
+
+            for value in sorted(known_hashes):
+                threat_intel['indicators'].append({
+                    'type': 'file_hash',
+                    'value': value,
+                    'reputation': 'malicious' if value in KNOWN_MALICIOUS_HASHES else 'suspicious',
+                    'sources': ['LocalForensics'],
+                    'confidence': 'high' if value in KNOWN_MALICIOUS_HASHES else 'medium'
+                })
+            for value in sorted(known_ips):
+                threat_intel['indicators'].append({
                     'type': 'ip_address',
-                    'value': '185.14.28.56',
-                    'reputation': 'malicious',
-                    'sources': ['AbuseIPDB', 'InternalIntel'],
-                    'confidence': 'high'
-                },
-                {
-                    'type': 'domain',
-                    'value': 'malicious-c2.example.com',
-                    'reputation': 'malicious',
-                    'sources': ['VirusTotal'],
+                    'value': value,
+                    'reputation': 'suspicious',
+                    'sources': ['LocalForensics'],
                     'confidence': 'medium'
-                }
-            ]
+                })
+            for value in sorted(known_domains):
+                threat_intel['indicators'].append({
+                    'type': 'domain',
+                    'value': value,
+                    'reputation': 'suspicious',
+                    'sources': ['LocalForensics'],
+                    'confidence': 'medium'
+                })
             
             self._log_step(operation_id, 'threat_intel', 'success', f"Completed threat intel lookup for {instance_id}")
             return threat_intel
