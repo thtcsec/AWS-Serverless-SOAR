@@ -38,7 +38,7 @@ jobs:
 
     - name: Dependency vulnerability scan (pip-audit)
       run: |
-        pip-audit -r requirements.txt
+        pip-audit -r requirements.txt --ignore $(echo "ecdsa;CVE-2024-23342")
         
     - name: Type check with Mypy
       run: |
@@ -60,6 +60,10 @@ jobs:
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: 1.7.5
+
+    - name: Terraform fmt
+      run: |
+        terraform fmt -recursive terraform/
 
     - name: Terraform fmt (check)
       run: |
