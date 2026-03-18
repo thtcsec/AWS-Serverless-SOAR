@@ -185,7 +185,7 @@ resource "aws_cloudwatch_event_target" "guardduty_to_sqs" {
   arn       = var.main_queue_arn
   
   # Transform the event for SQS processing
-  input_transformer = {
+  input_transformer {
     input_paths = {
       source = "$.source"
       detailType = "$.detail-type"
@@ -214,16 +214,16 @@ resource "aws_cloudwatch_event_target" "cloudtrail_to_sqs" {
   rule      = aws_cloudwatch_event_rule.cloudtrail_iam_events.name
   target_id = "CloudTrailToSQS"
   arn       = var.main_queue_arn
-  
-  input_transformer = {
+
+  input_transformer {
     input_paths = {
-      source = "$.source"
+      source     = "$.source"
       detailType = "$.detail-type"
-      detail = "$.detail"
-      time = "$.time"
-      id = "$.id"
-      account = "$.account"
-      region = "$.region"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
     }
     input_template = <<EOF
 {
@@ -244,8 +244,8 @@ resource "aws_cloudwatch_event_target" "s3_to_sqs" {
   rule      = aws_cloudwatch_event_rule.s3_data_events.name
   target_id = "S3ToSQS"
   arn       = var.main_queue_arn
-  
-  input_transformer = {
+
+  input_transformer {
     input_paths = {
       source = "$.source"
       detailType = "$.detail-type"
@@ -275,7 +275,7 @@ resource "aws_cloudwatch_event_target" "securityhub_to_sqs" {
   target_id = "SecurityHubToSQS"
   arn       = var.main_queue_arn
 
-  input_transformer = {
+  input_transformer {
     input_paths = {
       source     = "$.source"
       detailType = "$.detail-type"
@@ -305,7 +305,7 @@ resource "aws_cloudwatch_event_target" "inspector_to_sqs" {
   target_id = "InspectorToSQS"
   arn       = var.main_queue_arn
 
-  input_transformer = {
+  input_transformer {
     input_paths = {
       source     = "$.source"
       detailType = "$.detail-type"
@@ -335,7 +335,7 @@ resource "aws_cloudwatch_event_target" "macie_to_sqs" {
   target_id = "MacieToSQS"
   arn       = var.main_queue_arn
 
-  input_transformer = {
+  input_transformer {
     input_paths = {
       source     = "$.source"
       detailType = "$.detail-type"
