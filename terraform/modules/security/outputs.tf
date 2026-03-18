@@ -45,7 +45,7 @@ output "securityhub_account_id" {
 
 output "inspector_enabler_id" {
   description = "ID of the Inspector enabler"
-  value       = aws_inspector2_enabler.main.id
+  value       = aws_inspector2_enabler.inspector.id
 }
 
 output "macie_account_id" {

@@ -15,10 +15,9 @@ terraform {
 # Message Queue Layer (SQS)
 # ==========================================
 resource "aws_sqs_queue" "main_queue" {
-  name                      = "${var.environment}-soar-events"
-  max_receive_count         = 3
+  name                       = "${var.environment}-soar-events"
   visibility_timeout_seconds = 300
-  message_retention_seconds = 1209600 # 14 days
+  message_retention_seconds  = 1209600 # 14 days
 
   # Dead Letter Queue configuration
   redrive_policy = jsonencode({
