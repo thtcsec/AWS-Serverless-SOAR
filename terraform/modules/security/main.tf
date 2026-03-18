@@ -43,8 +43,8 @@ resource "aws_iam_role" "soar_central_role" {
       Name        = "${var.environment}-soar-central-role"
       Environment = var.environment
       Purpose     = "central-soar-execution"
-    }
-  })
+    },
+  )
 }
 
 # Cross-account SOAR responder role
@@ -78,8 +78,8 @@ resource "aws_iam_role" "soar_cross_account_responder" {
       Name        = "${var.environment}-soar-cross-account-responder"
       Environment = var.environment
       Purpose     = "cross-account-response"
-    }
-  })
+    },
+  )
 }
 
 # ==========================================
