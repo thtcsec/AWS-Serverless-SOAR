@@ -38,7 +38,7 @@ jobs:
 
     - name: Dependency vulnerability scan (pip-audit)
       run: |
-        pip-audit -r requirements.txt --ignore $(echo "ecdsa;CVE-2024-23342")
+        pip-audit -r requirements.txt --ignore "ecdsa;CVE-2024-23342"
         
     - name: Type check with Mypy
       run: |
