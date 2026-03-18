@@ -17,7 +17,11 @@ def mock_bedrock_client():
         {
             "content": [
                 {
-                    "text": "A crypto miner was detected on i-abc123. Severity is CRITICAL. Recommend immediate isolation and forensic snapshot."
+                    "text": (
+                        "A crypto miner was detected on i-abc123. "
+                        "Severity is CRITICAL. "
+                        "Recommend immediate isolation and forensic snapshot."
+                    )
                 }
             ],
             "usage": {"input_tokens": 150, "output_tokens": 40},

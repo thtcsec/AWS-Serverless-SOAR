@@ -74,10 +74,10 @@ def test_ec2_containment_playbook_execution(ec2_client):
 
     # 3. Execute playbook
     playbook = EC2ContainmentPlaybook()
-    assert playbook.can_handle(mock_event) == True
+    assert playbook.can_handle(mock_event)
 
     success = playbook.execute(mock_event)
-    assert success == True
+    assert success
 
     # 4. Verify outcomes
     instance = ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]
