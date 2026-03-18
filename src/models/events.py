@@ -1,10 +1,13 @@
+from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Literal, Dict, Any, Optional, List
+
 
 class GuardDutyResource(BaseModel):
-    instance_id: Optional[str] = None
-    bucket_name: Optional[str] = None
-    user_name: Optional[str] = None
+    instance_id: str | None = None
+    bucket_name: str | None = None
+    user_name: str | None = None
+
 
 class GuardDutyDetail(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -16,18 +19,19 @@ class GuardDutyDetail(BaseModel):
     id: str
     arn: str
     type: str
-    service: Dict[str, Any]
+    service: dict[str, Any]
     severity: float
     createdAt: str
     updatedAt: str
     title: str
     description: str
-    resource: Optional[Dict[str, Any]] = None
-    resources: Optional[List[Dict[str, Any]]] = None
+    resource: dict[str, Any] | None = None
+    resources: list[dict[str, Any]] | None = None
+
 
 class GuardDutyEvent(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
-    
+
     version: str
     id: str
     detail_type: Literal["GuardDuty Finding"] = Field(alias="detail-type")
@@ -38,24 +42,28 @@ class GuardDutyEvent(BaseModel):
     resources: list[str]
     detail: GuardDutyDetail
 
+
 class S3CloudTrailDetail(BaseModel):
     model_config = ConfigDict(extra="ignore")
     eventName: str
-    requestParameters: Optional[Dict[str, Any]] = None
-    userIdentity: Dict[str, Any]
-    sourceIPAddress: Optional[str] = None
+    requestParameters: dict[str, Any] | None = None
+    userIdentity: dict[str, Any]
+    sourceIPAddress: str | None = None
+
 
 class S3CloudTrailEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
     source: Literal["aws.s3"]
     detail: S3CloudTrailDetail
 
+
 class IAMCloudTrailDetail(BaseModel):
     model_config = ConfigDict(extra="ignore")
     eventName: str
-    userIdentity: Dict[str, Any]
-    sourceIPAddress: Optional[str] = None
-    errorCode: Optional[str] = None
+    userIdentity: dict[str, Any]
+    sourceIPAddress: str | None = None
+    errorCode: str | None = None
+
 
 class IAMCloudTrailEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")

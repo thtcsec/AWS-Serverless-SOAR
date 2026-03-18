@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime
 
+
 class JsonFormatter(logging.Formatter):
     """Custom JSON formatter for structured CloudWatch logging."""
 
@@ -13,12 +14,13 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "module": record.module,
         }
-        
+
         # Insert exception info if exists
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
-            
+
         return json.dumps(log_entry)
+
 
 def setup_logger(name: str = "SOAR_Engine", level: int = logging.INFO) -> logging.Logger:
     """Initialize and configure the global JSON logger."""
@@ -30,7 +32,8 @@ def setup_logger(name: str = "SOAR_Engine", level: int = logging.INFO) -> loggin
         handler = logging.StreamHandler()
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
-        
+
     return logger
+
 
 logger = setup_logger()

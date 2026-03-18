@@ -1,12 +1,13 @@
 """Tests for core modules: config, metrics, logger, registry."""
+
 import os
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestSOARConfig:
     def test_default_values(self):
         from src.core.config import SOARConfig
+
         cfg = SOARConfig()
         assert cfg.log_level == "INFO"
         assert cfg.exfiltration_threshold == 10737418240
@@ -16,11 +17,15 @@ class TestSOARConfig:
 
     def test_env_override(self):
         from src.core.config import SOARConfig
-        with patch.dict(os.environ, {
-            "LOG_LEVEL": "DEBUG",
-            "SNS_TOPIC_ARN": "arn:aws:sns:us-east-1:123:topic",
-            "EVIDENCE_BUCKET": "my-evidence-bucket",
-        }):
+
+        with patch.dict(
+            os.environ,
+            {
+                "LOG_LEVEL": "DEBUG",
+                "SNS_TOPIC_ARN": "arn:aws:sns:us-east-1:123:topic",
+                "EVIDENCE_BUCKET": "my-evidence-bucket",
+            },
+        ):
             cfg = SOARConfig()
             assert cfg.log_level == "DEBUG"
             assert cfg.sns_topic_arn == "arn:aws:sns:us-east-1:123:topic"
@@ -30,6 +35,7 @@ class TestSOARConfig:
 class TestLogger:
     def test_logger_creation(self):
         from src.core.logger import logger
+
         assert logger is not None
         assert logger.name is not None
 
@@ -38,6 +44,7 @@ class TestMetrics:
     @patch("src.core.metrics.AWSClientFacade")
     def test_emit_metric(self, mock_facade):
         from src.core.metrics import emit_metric
+
         mock_cw = MagicMock()
         mock_facade.cloudwatch.return_value = mock_cw
 
@@ -49,6 +56,7 @@ class TestMetrics:
     @patch("src.core.metrics.AWSClientFacade")
     def test_emit_metric_failure_logged(self, mock_facade):
         from src.core.metrics import emit_metric
+
         mock_cw = MagicMock()
         mock_cw.put_metric_data.side_effect = Exception("CloudWatch error")
         mock_facade.cloudwatch.return_value = mock_cw
@@ -59,6 +67,7 @@ class TestMetrics:
     @patch("src.core.metrics.emit_metric")
     def test_playbook_timer_success(self, mock_emit):
         from src.core.metrics import PlaybookTimer
+
         with PlaybookTimer("TestPlaybook"):
             pass  # simulate work
         # Should emit duration + success
@@ -70,6 +79,7 @@ class TestMetrics:
     @patch("src.core.metrics.emit_metric")
     def test_playbook_timer_failure(self, mock_emit):
         from src.core.metrics import PlaybookTimer
+
         try:
             with PlaybookTimer("FailPlaybook"):
                 raise ValueError("simulated failure")
@@ -97,6 +107,7 @@ class TestPlaybookRegistry:
 
     def test_no_matching_playbook(self):
         from src.playbooks.registry import PlaybookRegistry
+
         reg = PlaybookRegistry()
         assert reg.dispatch({"source": "unknown"}) is False
 

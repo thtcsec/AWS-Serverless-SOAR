@@ -1,7 +1,9 @@
 """Tests for AWS Incident Correlator."""
+
 import pytest
-from src.core.event_normalizer import UnifiedIncident
+
 from src.core.correlator import IncidentCorrelator
+from src.core.event_normalizer import UnifiedIncident
 
 
 class TestIncidentCorrelator:

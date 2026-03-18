@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 
 from src.core.event_normalizer import UnifiedIncident
 
@@ -23,9 +23,9 @@ class IncidentCorrelator:
     """In-memory incident log with IOC-based correlation."""
 
     def __init__(self) -> None:
-        self._incidents: Dict[str, UnifiedIncident] = {}
-        self._ip_index: Dict[str, List[str]] = defaultdict(list)
-        self._actor_index: Dict[str, List[str]] = defaultdict(list)
+        self._incidents: dict[str, UnifiedIncident] = {}
+        self._ip_index: dict[str, list[str]] = defaultdict(list)
+        self._actor_index: dict[str, list[str]] = defaultdict(list)
 
     def ingest(self, incident: UnifiedIncident) -> None:
         """Add an incident to the correlation store."""
@@ -39,7 +39,7 @@ class IncidentCorrelator:
 
         logger.info(f"Ingested incident {iid} ({incident.raw_event_type})")
 
-    def find_related(self, incident_id: str) -> List[UnifiedIncident]:
+    def find_related(self, incident_id: str) -> list[UnifiedIncident]:
         """Find incidents related to the given incident by shared IOCs."""
         target = self._incidents.get(incident_id)
         if not target:
@@ -67,10 +67,10 @@ class IncidentCorrelator:
 
         return related
 
-    def get_campaign_summary(self) -> List[Dict[str, Any]]:
+    def get_campaign_summary(self) -> list[dict[str, Any]]:
         """Group correlated incidents into potential attack campaigns."""
         visited: set[str] = set()
-        campaigns: List[Dict[str, Any]] = []
+        campaigns: list[dict[str, Any]] = []
 
         for iid in self._incidents:
             if iid in visited:
@@ -79,22 +79,24 @@ class IncidentCorrelator:
             cluster = self._build_cluster(iid, visited)
             if len(cluster) > 1:
                 incidents = [self._incidents[c] for c in cluster]
-                campaigns.append({
-                    "campaign_id": f"CAMP-{iid[:8]}",
-                    "incident_count": len(cluster),
-                    "platforms": list({i.platform for i in incidents}),
-                    "actors": list({i.actor for i in incidents if i.actor}),
-                    "source_ips": list({i.source_ip for i in incidents if i.source_ip}),
-                    "severity": max((i.severity for i in incidents), key=self._severity_rank),
-                    "incident_ids": cluster,
-                })
+                campaigns.append(
+                    {
+                        "campaign_id": f"CAMP-{iid[:8]}",
+                        "incident_count": len(cluster),
+                        "platforms": list({i.platform for i in incidents}),
+                        "actors": list({i.actor for i in incidents if i.actor}),
+                        "source_ips": list({i.source_ip for i in incidents if i.source_ip}),
+                        "severity": max((i.severity for i in incidents), key=self._severity_rank),
+                        "incident_ids": cluster,
+                    }
+                )
 
         return campaigns
 
-    def _build_cluster(self, start_id: str, visited: set[str]) -> List[str]:
+    def _build_cluster(self, start_id: str, visited: set[str]) -> list[str]:
         """BFS to find all transitively related incidents."""
         queue = [start_id]
-        cluster: List[str] = []
+        cluster: list[str] = []
 
         while queue:
             current = queue.pop(0)

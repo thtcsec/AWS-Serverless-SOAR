@@ -1,43 +1,50 @@
 """Tests for S3 Exfiltration playbook."""
-import pytest
-from unittest.mock import patch, MagicMock
+
+from unittest.mock import MagicMock, patch
+
 from tests.conftest import make_s3_cloudtrail_event
 
 
 class TestS3ExfiltrationCanHandle:
     def test_handles_get_object(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle(make_s3_cloudtrail_event("GetObject")) is True
 
     def test_handles_list_objects(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle(make_s3_cloudtrail_event("ListObjects")) is True
 
     def test_handles_download_file(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle(make_s3_cloudtrail_event("DownloadFile")) is True
 
     def test_rejects_put_object(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle(make_s3_cloudtrail_event("PutObject")) is False
 
     def test_rejects_invalid_event(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle({"source": "aws.ec2", "detail": {}}) is False
 
     def test_rejects_malformed_event(self):
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
-        with patch.object(S3ExfiltrationPlaybook, '__init__', lambda self: None):
+
+        with patch.object(S3ExfiltrationPlaybook, "__init__", lambda self: None):
             pb = S3ExfiltrationPlaybook()
             assert pb.can_handle({"garbage": True}) is False
 
@@ -50,14 +57,12 @@ class TestS3ExfiltrationExecute:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
 
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
+
         pb = S3ExfiltrationPlaybook.__new__(S3ExfiltrationPlaybook)
         pb.s3 = MagicMock()
-        pb.s3.get_bucket_policy.return_value = {
-            'Policy': '{"Version": "2012-10-17", "Statement": []}'
-        }
+        pb.s3.get_bucket_policy.return_value = {"Policy": '{"Version": "2012-10-17", "Statement": []}'}
 
-        event = make_s3_cloudtrail_event("GetObject", "target-bucket",
-                                          "arn:aws:iam::123456789012:user/attacker")
+        event = make_s3_cloudtrail_event("GetObject", "target-bucket", "arn:aws:iam::123456789012:user/attacker")
         result = pb.execute(event)
 
         assert result is True
@@ -71,6 +76,7 @@ class TestS3ExfiltrationExecute:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
 
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
+
         pb = S3ExfiltrationPlaybook.__new__(S3ExfiltrationPlaybook)
         pb.s3 = MagicMock()
 
@@ -80,7 +86,7 @@ class TestS3ExfiltrationExecute:
                 "eventName": "GetObject",
                 "requestParameters": None,
                 "userIdentity": {"arn": "arn:aws:iam::123:user/x"},
-            }
+            },
         }
         result = pb.execute(event)
         assert result is False
@@ -92,6 +98,7 @@ class TestS3ExfiltrationExecute:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
 
         from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
+
         pb = S3ExfiltrationPlaybook.__new__(S3ExfiltrationPlaybook)
         pb.s3 = MagicMock()
 
@@ -101,7 +108,7 @@ class TestS3ExfiltrationExecute:
                 "eventName": "GetObject",
                 "requestParameters": {"bucketName": "bucket"},
                 "userIdentity": {},
-            }
+            },
         }
         result = pb.execute(event)
         assert result is False

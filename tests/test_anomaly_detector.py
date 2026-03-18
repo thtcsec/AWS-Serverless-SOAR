@@ -1,5 +1,7 @@
 """Tests for AWS Anomaly Detector."""
+
 import pytest
+
 from src.integrations.anomaly_detector import AnomalyDetector
 
 

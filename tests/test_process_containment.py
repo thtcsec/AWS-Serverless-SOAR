@@ -1,6 +1,9 @@
 """Tests for AWS Process Containment via SSM."""
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.core.process_containment import ProcessContainment
 
 
@@ -23,9 +26,7 @@ class TestProcessContainment:
         )
 
     def _setup_ssm_success(self, ssm_client, output):
-        ssm_client.send_command.return_value = {
-            "Command": {"CommandId": "cmd-123"}
-        }
+        ssm_client.send_command.return_value = {"Command": {"CommandId": "cmd-123"}}
         ssm_client.get_command_invocation.return_value = {
             "Status": "Success",
             "StandardOutputContent": output,
@@ -66,9 +67,7 @@ class TestProcessContainment:
         assert "xmrig" in report["suspicious_processes"][0]["command"]
 
     def test_ssm_command_timeout(self, containment, ssm_client):
-        ssm_client.send_command.return_value = {
-            "Command": {"CommandId": "cmd-timeout"}
-        }
+        ssm_client.send_command.return_value = {"Command": {"CommandId": "cmd-timeout"}}
         ssm_client.get_command_invocation.return_value = {
             "Status": "InProgress",
         }

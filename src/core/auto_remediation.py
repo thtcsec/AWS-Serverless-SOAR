@@ -5,7 +5,7 @@ via SSM Run Command after containment is complete.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -13,7 +13,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 # Known CVE → package mappings for auto-remediation
-VULNERABILITY_PATCH_MAP: Dict[str, List[str]] = {
+VULNERABILITY_PATCH_MAP: dict[str, list[str]] = {
     "openssl": ["openssl", "libssl-dev"],
     "log4j": ["liblog4j2-java"],
     "curl": ["curl", "libcurl4"],
@@ -28,14 +28,14 @@ VULNERABILITY_PATCH_MAP: Dict[str, List[str]] = {
 class AutoRemediation:
     """Automated vulnerability patching via SSM Run Command."""
 
-    def __init__(self, client: Optional[Any] = None):
+    def __init__(self, client: Any | None = None):
         self.ssm = client or boto3.client("ssm")
 
     def patch_instance(
         self,
         instance_id: str,
-        vulnerability_keywords: List[str],
-    ) -> Dict[str, Any]:
+        vulnerability_keywords: list[str],
+    ) -> dict[str, Any]:
         """
         Patch an EC2 instance by upgrading packages related to
         detected vulnerabilities.
@@ -48,7 +48,7 @@ class AutoRemediation:
         Returns:
             Dict with patch results.
         """
-        packages_to_patch: List[str] = []
+        packages_to_patch: list[str] = []
         for keyword in vulnerability_keywords:
             kw = keyword.lower()
             for vuln_key, pkgs in VULNERABILITY_PATCH_MAP.items():
@@ -64,10 +64,7 @@ class AutoRemediation:
                 "reason": "No matching packages found for given keywords.",
             }
 
-        patch_cmd = (
-            "apt-get update -qq && "
-            f"apt-get install -y --only-upgrade {' '.join(packages_to_patch)}"
-        )
+        patch_cmd = f"apt-get update -qq && apt-get install -y --only-upgrade {' '.join(packages_to_patch)}"
 
         try:
             response = self.ssm.send_command(

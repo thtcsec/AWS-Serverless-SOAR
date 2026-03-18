@@ -7,7 +7,7 @@ from raw UnifiedIncident data, enriching Slack alerts with actionable context.
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -36,16 +36,12 @@ class AISummarizer:
         self,
         model_id: str = DEFAULT_MODEL_ID,
         region: str = DEFAULT_REGION,
-        client: Optional[Any] = None,
+        client: Any | None = None,
     ):
         self.model_id = model_id
-        self.client = client or boto3.client(
-            "bedrock-runtime", region_name=region
-        )
+        self.client = client or boto3.client("bedrock-runtime", region_name=region)
 
-    def summarize_incident(
-        self, incident_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def summarize_incident(self, incident_data: dict[str, Any]) -> dict[str, Any]:
         """
         Summarize an incident using Amazon Bedrock.
 
@@ -57,19 +53,18 @@ class AISummarizer:
             On failure returns 'summary' with a fallback message.
         """
         try:
-            user_message = (
-                "Summarize the following security incident:\n\n"
-                + json.dumps(incident_data, indent=2, default=str)
+            user_message = "Summarize the following security incident:\n\n" + json.dumps(
+                incident_data, indent=2, default=str
             )
 
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 512,
-                "system": SYSTEM_PROMPT,
-                "messages": [
-                    {"role": "user", "content": user_message}
-                ],
-            })
+            body = json.dumps(
+                {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 512,
+                    "system": SYSTEM_PROMPT,
+                    "messages": [{"role": "user", "content": user_message}],
+                }
+            )
 
             response = self.client.invoke_model(
                 modelId=self.model_id,
@@ -79,9 +74,7 @@ class AISummarizer:
             )
 
             result = json.loads(response["body"].read())
-            summary_text = (
-                result.get("content", [{}])[0].get("text", "")
-            )
+            summary_text = result.get("content", [{}])[0].get("text", "")
 
             logger.info("AI summary generated successfully.")
             return {
@@ -102,8 +95,8 @@ class AISummarizer:
     # ------------------------------------------------------------------
     @staticmethod
     def _fallback_summary(
-        incident_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        incident_data: dict[str, Any],
+    ) -> dict[str, Any]:
         """Return a rule-based summary when Bedrock is unreachable."""
         severity = incident_data.get("severity", "UNKNOWN")
         resource = incident_data.get("resource", "N/A")

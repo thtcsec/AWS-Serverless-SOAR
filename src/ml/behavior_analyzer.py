@@ -5,9 +5,8 @@ that rule-based systems would miss.
 """
 
 import logging
-import math
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("aws-soar.ml.behavior")
 
@@ -25,15 +24,15 @@ class BehaviorAnalyzer:
 
     def __init__(self) -> None:
         # actor_id -> list of behavior records
-        self._baselines: Dict[str, List[Dict[str, Any]]] = {}
+        self._baselines: dict[str, list[dict[str, Any]]] = {}
 
-    def record_activity(self, actor: str, activity: Dict[str, Any]) -> None:
+    def record_activity(self, actor: str, activity: dict[str, Any]) -> None:
         """Record an activity event for baseline building."""
         if actor not in self._baselines:
             self._baselines[actor] = []
 
         record = {
-            "timestamp": activity.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "timestamp": activity.get("timestamp", datetime.now(UTC).isoformat()),
             "action": activity.get("action", ""),
             "source_ip": activity.get("source_ip", ""),
             "region": activity.get("region", ""),
@@ -42,7 +41,7 @@ class BehaviorAnalyzer:
         }
         self._baselines[actor] = self._baselines[actor][-99:] + [record]
 
-    def analyze(self, actor: str, current_event: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze(self, actor: str, current_event: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze current event against actor's behavioral baseline.
 
@@ -61,8 +60,8 @@ class BehaviorAnalyzer:
                 "recommendation": "MONITOR",
             }
 
-        flags: List[str] = []
-        scores: List[float] = []
+        flags: list[str] = []
+        scores: list[float] = []
 
         # 1. IP anomaly check
         ip_score = self._check_ip_anomaly(baseline, current_event)
@@ -89,12 +88,7 @@ class BehaviorAnalyzer:
             flags.append("UNUSUAL_ACTION_TYPE")
 
         # Weighted aggregate
-        behavior_score = (
-            ip_score * 0.30
-            + freq_score * 0.25
-            + time_score * 0.20
-            + action_score * 0.25
-        )
+        behavior_score = ip_score * 0.30 + freq_score * 0.25 + time_score * 0.20 + action_score * 0.25
 
         is_anomalous = behavior_score > 50 or len(flags) >= 2
 
@@ -120,16 +114,17 @@ class BehaviorAnalyzer:
 
         logger.info(
             "Behavior analysis for %s: score=%.1f anomalous=%s flags=%s",
-            actor, behavior_score, is_anomalous, flags,
+            actor,
+            behavior_score,
+            is_anomalous,
+            flags,
         )
         return result
 
     # ---- Private Analysis Methods ----
 
     @staticmethod
-    def _check_ip_anomaly(
-        baseline: List[Dict[str, Any]], event: Dict[str, Any]
-    ) -> float:
+    def _check_ip_anomaly(baseline: list[dict[str, Any]], event: dict[str, Any]) -> float:
         """Check if the source IP is new for this actor."""
         known_ips = {r["source_ip"] for r in baseline if r.get("source_ip")}
         current_ip = event.get("source_ip", "")
@@ -142,9 +137,7 @@ class BehaviorAnalyzer:
         return 80.0  # Novel IP = high anomaly
 
     @staticmethod
-    def _check_frequency_anomaly(
-        baseline: List[Dict[str, Any]], event: Dict[str, Any]
-    ) -> float:
+    def _check_frequency_anomaly(baseline: list[dict[str, Any]], event: dict[str, Any]) -> float:
         """Check if event frequency deviates from baseline."""
         if len(baseline) < 2:
             return 20.0
@@ -164,9 +157,7 @@ class BehaviorAnalyzer:
         return 15.0
 
     @staticmethod
-    def _check_temporal_anomaly(
-        baseline: List[Dict[str, Any]], event: Dict[str, Any]
-    ) -> float:
+    def _check_temporal_anomaly(baseline: list[dict[str, Any]], event: dict[str, Any]) -> float:
         """Check if the event occurs at unusual times."""
         timestamp = event.get("timestamp", "")
         try:
@@ -196,9 +187,7 @@ class BehaviorAnalyzer:
         return 15.0
 
     @staticmethod
-    def _check_action_anomaly(
-        baseline: List[Dict[str, Any]], event: Dict[str, Any]
-    ) -> float:
+    def _check_action_anomaly(baseline: list[dict[str, Any]], event: dict[str, Any]) -> float:
         """Check if the action type is unusual for this actor."""
         known_actions = {r.get("action", "") for r in baseline}
         current_action = event.get("action", "")
@@ -208,7 +197,7 @@ class BehaviorAnalyzer:
         return 75.0  # Never before seen action type
 
     @staticmethod
-    def _build_reasoning(flags: List[str], score: float) -> str:
+    def _build_reasoning(flags: list[str], score: float) -> str:
         if not flags:
             return f"Activity within normal parameters (score={score:.1f})."
         reasons = {

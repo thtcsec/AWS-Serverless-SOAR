@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,7 @@ logger = logging.getLogger("aws-soar.normalizer")
 # ---------------------------------------------------------------------------
 # Unified Incident Schema
 # ---------------------------------------------------------------------------
+
 
 class UnifiedIncident(BaseModel):
     """Platform-agnostic incident representation."""
@@ -34,15 +35,16 @@ class UnifiedIncident(BaseModel):
     resource_type: str = ""
     risk_score: float = 0.0
     decision: str = "IGNORE"
-    intel_summary: Dict[str, Any] = Field(default_factory=dict)
-    tags: List[str] = Field(default_factory=list)
+    intel_summary: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
     raw_event_type: str = ""
-    correlation_keys: List[str] = Field(default_factory=list)
+    correlation_keys: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
 # Normalizer
 # ---------------------------------------------------------------------------
+
 
 class EventNormalizer:
     """Normalize native AWS security events into UnifiedIncident objects."""
@@ -53,7 +55,7 @@ class EventNormalizer:
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     @classmethod
-    def from_guardduty(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_guardduty(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize a GuardDuty finding into a UnifiedIncident."""
         detail = event_data.get("detail", {})
         service = detail.get("service", {})
@@ -61,23 +63,18 @@ class EventNormalizer:
 
         source_ip = ""
         if "networkConnectionAction" in action_info:
-            source_ip = (
-                action_info["networkConnectionAction"]
-                .get("remoteIpDetails", {})
-                .get("ipAddressV4", "")
-            )
+            source_ip = action_info["networkConnectionAction"].get("remoteIpDetails", {}).get("ipAddressV4", "")
 
         resource_info = detail.get("resource", {})
         instance_details = resource_info.get("instanceDetails", {})
         resource_id = instance_details.get("instanceId", "")
         resource_type = detail.get("type", "").split("/")[0] if "/" in detail.get("type", "") else "unknown"
 
-        actor = (
-            resource_info.get("accessKeyDetails", {}).get("userName", "")
-            or service.get("additionalInfo", {}).get("calledBy", "unknown")
+        actor = resource_info.get("accessKeyDetails", {}).get("userName", "") or service.get("additionalInfo", {}).get(
+            "calledBy", "unknown"
         )
 
-        ts = event_data.get("time", datetime.now(timezone.utc).isoformat())
+        ts = event_data.get("time", datetime.now(UTC).isoformat())
         incident_id = cls._generate_id("guardduty", resource_id, ts)
 
         severity_val = detail.get("severity", 0)
@@ -108,7 +105,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def from_cloudtrail_iam(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_cloudtrail_iam(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize an IAM CloudTrail event into a UnifiedIncident."""
         detail = event_data.get("detail", {})
         user_identity = detail.get("userIdentity", {})
@@ -116,7 +113,7 @@ class EventNormalizer:
         actor = user_identity.get("userName", user_identity.get("arn", "unknown"))
         source_ip = detail.get("sourceIPAddress", "")
         action = detail.get("eventName", "")
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
 
         incident_id = cls._generate_id("iam", actor, ts)
         correlation_keys = [k for k in [source_ip, actor] if k]
@@ -137,7 +134,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def from_cloudtrail_s3(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_cloudtrail_s3(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize an S3 CloudTrail event into a UnifiedIncident."""
         detail = event_data.get("detail", {})
         user_identity = detail.get("userIdentity", {})
@@ -147,7 +144,7 @@ class EventNormalizer:
         source_ip = detail.get("sourceIPAddress", "")
         action = detail.get("eventName", "")
         bucket = request_params.get("bucketName", "")
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
 
         incident_id = cls._generate_id("s3", bucket, ts)
         correlation_keys = [k for k in [source_ip, actor, bucket] if k]
@@ -168,7 +165,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def normalize(cls, event_data: Dict[str, Any]) -> Optional[UnifiedIncident]:
+    def normalize(cls, event_data: dict[str, Any]) -> UnifiedIncident | None:
         """Auto-detect event type and normalize accordingly."""
         source = event_data.get("source", "")
         detail_type = event_data.get("detail-type", "")

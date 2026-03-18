@@ -6,8 +6,8 @@ Reports include timeline, severity, actions taken, and recommendations.
 
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +85,11 @@ class ReportGenerator:
     @classmethod
     def generate(
         cls,
-        incident_data: Dict[str, Any],
-        actions: Optional[List[Dict[str, str]]] = None,
-        recommendations: Optional[List[str]] = None,
+        incident_data: dict[str, Any],
+        actions: list[dict[str, str]] | None = None,
+        recommendations: list[str] | None = None,
         output_dir: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate a Markdown incident report.
 
@@ -103,10 +103,11 @@ class ReportGenerator:
             Dict with 'report_path' and 'report_content'.
         """
         import tempfile
+
         if not output_dir:
             output_dir = os.path.join(tempfile.gettempdir(), "soar_reports")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         report_id = f"IR-{now.strftime('%Y%m%d-%H%M%S')}"
 
         severity = incident_data.get("severity", "UNKNOWN")
@@ -136,9 +137,7 @@ class ReportGenerator:
             (timestamp, f"Risk score calculated: **{risk_score}**"),
             (timestamp, f"Decision: **{decision}**"),
         ]
-        timeline_rows = "\n".join(
-            f"| {t} | {e} |" for t, e in timeline_entries
-        )
+        timeline_rows = "\n".join(f"| {t} | {e} |" for t, e in timeline_entries)
 
         # Resources
         resource_rows = f"| `{resource}` | {resource_type} | Actor: `{actor}` |"
@@ -154,10 +153,7 @@ class ReportGenerator:
 
         # Actions taken
         if actions:
-            actions_md = "\n".join(
-                f"- ✅ **{a.get('action', 'N/A')}**: {a.get('detail', '')}"
-                for a in actions
-            )
+            actions_md = "\n".join(f"- ✅ **{a.get('action', 'N/A')}**: {a.get('detail', '')}" for a in actions)
         else:
             actions_md = "- ✅ Automated response executed per SOAR decision engine."
 

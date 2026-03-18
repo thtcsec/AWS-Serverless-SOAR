@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("aws-soar.anomaly")
 
@@ -27,9 +27,9 @@ class AnomalyDetector:
     def __init__(self) -> None:
         self._model: Any = None
         self._trained = False
-        self._history: List[List[float]] = []
+        self._history: list[list[float]] = []
 
-    def train(self, historical_data: List[Dict[str, float]]) -> bool:
+    def train(self, historical_data: list[dict[str, float]]) -> bool:
         """Train the Isolation Forest model on historical feature vectors."""
         if len(historical_data) < 10:
             logger.warning("Not enough data to train anomaly model (need >= 10 samples)")
@@ -58,7 +58,7 @@ class AnomalyDetector:
             logger.error(f"Failed to train anomaly model: {e}")
             return False
 
-    def predict(self, event_features: Dict[str, float]) -> float:
+    def predict(self, event_features: dict[str, float]) -> float:
         """
         Predict anomaly score for an event.
         Returns a score from -1.0 (anomalous) to 1.0 (normal).
@@ -78,11 +78,11 @@ class AnomalyDetector:
         """Determine if a score indicates anomalous behavior."""
         return score < threshold
 
-    def _extract_features(self, data: Dict[str, float]) -> List[float]:
+    def _extract_features(self, data: dict[str, float]) -> list[float]:
         """Extract ordered feature vector from a dict."""
         return [float(data.get(k, 0.0)) for k in self.FEATURE_KEYS]
 
-    def _zscore_fallback(self, features: List[float]) -> float:
+    def _zscore_fallback(self, features: list[float]) -> float:
         """Simple z-score based anomaly detection when ML model is unavailable."""
         if len(self._history) < 2:
             return 0.0  # Not enough data, assume normal

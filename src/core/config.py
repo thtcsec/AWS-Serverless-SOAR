@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class SOARConfig(BaseSettings):
     """SOAR Application Configuration using Pydantic Settings."""
+
     sns_topic_arn: str = ""
     exfiltration_threshold: int = 10737418240
     log_level: str = "INFO"

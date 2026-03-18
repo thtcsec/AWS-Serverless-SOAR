@@ -1,7 +1,10 @@
 """Tests for AWS Secret Rotation Manager."""
-import pytest
+
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
-from datetime import datetime, timezone, timedelta
+
+import pytest
+
 from src.core.secret_rotation import SecretRotationManager
 
 
@@ -17,7 +20,7 @@ class TestSecretRotationManager:
     def test_check_key_age_fresh(self, manager, ssm_client):
         ssm_client.get_parameter.return_value = {
             "Parameter": {
-                "LastModifiedDate": datetime.now(timezone.utc) - timedelta(days=10),
+                "LastModifiedDate": datetime.now(UTC) - timedelta(days=10),
                 "Version": 3,
             }
         }
@@ -28,7 +31,7 @@ class TestSecretRotationManager:
     def test_check_key_age_stale(self, manager, ssm_client):
         ssm_client.get_parameter.return_value = {
             "Parameter": {
-                "LastModifiedDate": datetime.now(timezone.utc) - timedelta(days=100),
+                "LastModifiedDate": datetime.now(UTC) - timedelta(days=100),
                 "Version": 1,
             }
         }
@@ -49,7 +52,7 @@ class TestSecretRotationManager:
     def test_get_rotation_report(self, manager, ssm_client):
         ssm_client.get_parameter.return_value = {
             "Parameter": {
-                "LastModifiedDate": datetime.now(timezone.utc) - timedelta(days=50),
+                "LastModifiedDate": datetime.now(UTC) - timedelta(days=50),
                 "Version": 2,
             }
         }

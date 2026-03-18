@@ -1,16 +1,16 @@
 """Unit tests for AWS Auto-Remediation Patching."""
 
 from unittest.mock import MagicMock
+
 import pytest
+
 from src.core.auto_remediation import AutoRemediation
 
 
 @pytest.fixture
 def mock_ssm():
     client = MagicMock()
-    client.send_command.return_value = {
-        "Command": {"CommandId": "cmd-test-123"}
-    }
+    client.send_command.return_value = {"Command": {"CommandId": "cmd-test-123"}}
     return client
 
 
@@ -41,9 +41,9 @@ class TestAutoRemediation:
     def test_patch_ssm_error(self):
         client = MagicMock()
         from botocore.exceptions import ClientError
+
         client.send_command.side_effect = ClientError(
-            {"Error": {"Code": "InvalidInstanceId", "Message": "not found"}},
-            "SendCommand"
+            {"Error": {"Code": "InvalidInstanceId", "Message": "not found"}}, "SendCommand"
         )
         remediation = AutoRemediation(client=client)
         result = remediation.patch_instance("i-bad", ["openssl"])

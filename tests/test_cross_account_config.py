@@ -27,13 +27,15 @@ def test_cross_account_map_from_json(mock_boto_client):
 def test_cross_account_strict_validation_raises(mock_boto_client):
     mock_boto_client.return_value = MagicMock()
     payload = '{"dev":{"account_id":"bad-id","role_name":"soar-role"}}'
-    with patch.dict(
-        os.environ,
-        {
-            "CROSS_ACCOUNT_MAP": payload,
-            "CROSS_ACCOUNT_STRICT_CONFIG": "true",
-        },
-        clear=False,
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CROSS_ACCOUNT_MAP": payload,
+                "CROSS_ACCOUNT_STRICT_CONFIG": "true",
+            },
+            clear=False,
+        ),
+        pytest.raises(ValueError),
     ):
-        with pytest.raises(ValueError):
-            CrossAccountResponder()
+        CrossAccountResponder()

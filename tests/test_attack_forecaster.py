@@ -1,26 +1,59 @@
 """Unit tests for ML Attack Forecaster."""
 
 import pytest
+
 from src.ml.attack_forecaster import AttackForecaster
 
 
 @pytest.fixture
 def forecaster():
     af = AttackForecaster()
-    af.ingest([
-        {"action": "CryptoMining", "severity": "HIGH", "resource_type": "ec2",
-         "source_ip": "1.2.3.4", "timestamp": "2026-03-01T10:00:00Z"},
-        {"action": "CryptoMining", "severity": "CRITICAL", "resource_type": "ec2",
-         "source_ip": "1.2.3.5", "timestamp": "2026-03-02T10:00:00Z"},
-        {"action": "DataExfiltration", "severity": "HIGH", "resource_type": "s3",
-         "source_ip": "5.6.7.8", "timestamp": "2026-03-03T10:00:00Z"},
-        {"action": "BruteForce", "severity": "MEDIUM", "resource_type": "iam",
-         "source_ip": "9.10.11.12", "timestamp": "2026-03-04T10:00:00Z"},
-        {"action": "CryptoMining", "severity": "HIGH", "resource_type": "ec2",
-         "source_ip": "1.2.3.6", "timestamp": "2026-03-05T10:00:00Z"},
-        {"action": "PrivilegeEscalation", "severity": "CRITICAL", "resource_type": "iam",
-         "source_ip": "13.14.15.16", "timestamp": "2026-03-06T10:00:00Z"},
-    ])
+    af.ingest(
+        [
+            {
+                "action": "CryptoMining",
+                "severity": "HIGH",
+                "resource_type": "ec2",
+                "source_ip": "1.2.3.4",
+                "timestamp": "2026-03-01T10:00:00Z",
+            },
+            {
+                "action": "CryptoMining",
+                "severity": "CRITICAL",
+                "resource_type": "ec2",
+                "source_ip": "1.2.3.5",
+                "timestamp": "2026-03-02T10:00:00Z",
+            },
+            {
+                "action": "DataExfiltration",
+                "severity": "HIGH",
+                "resource_type": "s3",
+                "source_ip": "5.6.7.8",
+                "timestamp": "2026-03-03T10:00:00Z",
+            },
+            {
+                "action": "BruteForce",
+                "severity": "MEDIUM",
+                "resource_type": "iam",
+                "source_ip": "9.10.11.12",
+                "timestamp": "2026-03-04T10:00:00Z",
+            },
+            {
+                "action": "CryptoMining",
+                "severity": "HIGH",
+                "resource_type": "ec2",
+                "source_ip": "1.2.3.6",
+                "timestamp": "2026-03-05T10:00:00Z",
+            },
+            {
+                "action": "PrivilegeEscalation",
+                "severity": "CRITICAL",
+                "resource_type": "iam",
+                "source_ip": "13.14.15.16",
+                "timestamp": "2026-03-06T10:00:00Z",
+            },
+        ]
+    )
     return af
 
 

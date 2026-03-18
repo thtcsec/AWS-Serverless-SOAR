@@ -1,7 +1,10 @@
 """Tests for AWS Audit Logger."""
-import pytest
+
 from unittest.mock import MagicMock
-from src.core.audit_logger import AuditLogger, AuditAction, AuditEntry
+
+import pytest
+
+from src.core.audit_logger import AuditAction, AuditEntry, AuditLogger
 
 
 class TestAuditEntry:

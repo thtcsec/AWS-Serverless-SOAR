@@ -8,8 +8,8 @@ and integration secrets (Slack webhooks, Jira tokens).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("aws-soar.secret_rotation")
 
@@ -31,7 +31,7 @@ class SecretRotationManager:
         self._ssm = ssm_client
         self._secrets = secrets_client
 
-    def check_key_age(self, parameter_name: str) -> Dict[str, Any]:
+    def check_key_age(self, parameter_name: str) -> dict[str, Any]:
         """Check the age of a parameter in SSM Parameter Store."""
         if not self._ssm:
             return {"error": "SSM client not configured"}
@@ -44,10 +44,7 @@ class SecretRotationManager:
             param = response.get("Parameter", {})
             last_modified = param.get("LastModifiedDate")
 
-            if last_modified:
-                age_days = (datetime.now(timezone.utc) - last_modified).days
-            else:
-                age_days = -1
+            age_days = (datetime.now(UTC) - last_modified).days if last_modified else -1
 
             return {
                 "parameter_name": parameter_name,
@@ -60,9 +57,7 @@ class SecretRotationManager:
             logger.error(f"Failed to check key age for {parameter_name}: {e}")
             return {"parameter_name": parameter_name, "error": str(e)}
 
-    def rotate_parameter(
-        self, parameter_name: str, new_value: str
-    ) -> bool:
+    def rotate_parameter(self, parameter_name: str, new_value: str) -> bool:
         """Rotate a secret in SSM Parameter Store."""
         if not self._ssm:
             return False
@@ -80,11 +75,9 @@ class SecretRotationManager:
             logger.error(f"Failed to rotate {parameter_name}: {e}")
             return False
 
-    def get_rotation_report(
-        self, parameter_names: List[str]
-    ) -> Dict[str, Any]:
+    def get_rotation_report(self, parameter_names: list[str]) -> dict[str, Any]:
         """Generate a rotation status report for all monitored secrets."""
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         needs_rotation_count = 0
 
         for name in parameter_names:
@@ -101,7 +94,7 @@ class SecretRotationManager:
         }
 
     @staticmethod
-    def get_monitored_parameters() -> List[str]:
+    def get_monitored_parameters() -> list[str]:
         """Return the list of SOAR parameter names that should be monitored."""
         return [
             "/soar/virustotal/api_key",

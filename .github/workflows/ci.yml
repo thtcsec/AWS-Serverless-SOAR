@@ -22,14 +22,23 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install ruff pip-audit
         
-    - name: Lint with flake8
+    - name: Lint with Ruff
       run: |
-        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+        ruff check src tests
+
+    - name: Check formatting with Ruff
+      run: |
+        ruff format --check src tests
         
     - name: Security scan with Bandit
       run: |
         bandit -r src -ll -ii
+
+    - name: Dependency vulnerability scan (pip-audit)
+      run: |
+        pip-audit -r requirements.txt
         
     - name: Type check with Mypy
       run: |
@@ -47,10 +56,30 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.5
+
+    - name: Terraform fmt (check)
+      run: |
+        terraform fmt -check -recursive terraform/
+
+    - name: Terraform validate (all envs, no backend)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for env in terraform/environments/*; do
+          if [ -d "$env" ]; then
+            echo "Validating: $env"
+            (cd "$env" && terraform init -backend=false -input=false && terraform validate)
+          fi
+        done
+
     - name: Run Checkov IaC Security Scan
       uses: bridgecrewio/checkov-action@v12
       with:
         directory: terraform/
         framework: terraform
-        soft_fail: true
+        soft_fail: false
         output_format: cli

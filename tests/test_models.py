@@ -1,11 +1,13 @@
 """Tests for Pydantic event models."""
-from src.models.events import (
-    GuardDutyEvent, GuardDutyDetail, GuardDutyResource,
-    S3CloudTrailEvent, S3CloudTrailDetail,
-    IAMCloudTrailEvent, IAMCloudTrailDetail,
-)
-from pydantic import ValidationError
+
 import pytest
+from pydantic import ValidationError
+
+from src.models.events import (
+    GuardDutyEvent,
+    IAMCloudTrailEvent,
+    S3CloudTrailEvent,
+)
 
 
 class TestGuardDutyEvent:
@@ -33,7 +35,7 @@ class TestGuardDutyEvent:
                 "updatedAt": "2026-03-01T00:00:00Z",
                 "title": "Test",
                 "description": "Test",
-            }
+            },
         }
         event = GuardDutyEvent.model_validate(data)
         assert event.source == "aws.guardduty"
@@ -42,35 +44,60 @@ class TestGuardDutyEvent:
 
     def test_invalid_source_rejected(self):
         data = {
-            "version": "0", "id": "x",
+            "version": "0",
+            "id": "x",
             "detail-type": "GuardDuty Finding",
             "source": "aws.iam",
-            "account": "1", "time": "t", "region": "r", "resources": [],
+            "account": "1",
+            "time": "t",
+            "region": "r",
+            "resources": [],
             "detail": {
-                "schemaVersion": "2.0", "accountId": "1", "region": "r",
-                "partition": "aws", "id": "1",
-                "arn": "arn", "type": "t", "service": {},
-                "severity": 1.0, "createdAt": "t", "updatedAt": "t",
-                "title": "t", "description": "d"
-            }
+                "schemaVersion": "2.0",
+                "accountId": "1",
+                "region": "r",
+                "partition": "aws",
+                "id": "1",
+                "arn": "arn",
+                "type": "t",
+                "service": {},
+                "severity": 1.0,
+                "createdAt": "t",
+                "updatedAt": "t",
+                "title": "t",
+                "description": "d",
+            },
         }
         with pytest.raises(ValidationError):
             GuardDutyEvent.model_validate(data)
 
     def test_extra_fields_ignored(self):
         data = {
-            "version": "0", "id": "x",
+            "version": "0",
+            "id": "x",
             "detail-type": "GuardDuty Finding",
             "source": "aws.guardduty",
-            "account": "1", "time": "t", "region": "r", "resources": [],
+            "account": "1",
+            "time": "t",
+            "region": "r",
+            "resources": [],
             "extra_field": "should_be_ignored",
             "detail": {
-                "schemaVersion": "2.0", "accountId": "1", "region": "r",
-                "partition": "aws", "id": "1", "arn": "arn", "type": "t",
-                "service": {}, "severity": 1.0, "createdAt": "t",
-                "updatedAt": "t", "title": "t", "description": "d",
-                "unknownField": "ignored"
-            }
+                "schemaVersion": "2.0",
+                "accountId": "1",
+                "region": "r",
+                "partition": "aws",
+                "id": "1",
+                "arn": "arn",
+                "type": "t",
+                "service": {},
+                "severity": 1.0,
+                "createdAt": "t",
+                "updatedAt": "t",
+                "title": "t",
+                "description": "d",
+                "unknownField": "ignored",
+            },
         }
         event = GuardDutyEvent.model_validate(data)
         assert event.source == "aws.guardduty"
@@ -84,17 +111,14 @@ class TestS3CloudTrailEvent:
                 "eventName": "GetObject",
                 "requestParameters": {"bucketName": "my-bucket"},
                 "userIdentity": {"arn": "arn:aws:iam::123456789012:user/test"},
-            }
+            },
         }
         event = S3CloudTrailEvent.model_validate(data)
         assert event.detail.eventName == "GetObject"
 
     def test_invalid_source_rejected(self):
         with pytest.raises(ValidationError):
-            S3CloudTrailEvent.model_validate({
-                "source": "aws.ec2",
-                "detail": {"eventName": "X", "userIdentity": {}}
-            })
+            S3CloudTrailEvent.model_validate({"source": "aws.ec2", "detail": {"eventName": "X", "userIdentity": {}}})
 
     def test_optional_fields(self):
         data = {
@@ -102,7 +126,7 @@ class TestS3CloudTrailEvent:
             "detail": {
                 "eventName": "ListObjects",
                 "userIdentity": {"arn": "test"},
-            }
+            },
         }
         event = S3CloudTrailEvent.model_validate(data)
         assert event.detail.requestParameters is None
@@ -116,7 +140,7 @@ class TestIAMCloudTrailEvent:
             "detail": {
                 "eventName": "CreateAccessKey",
                 "userIdentity": {"userName": "testuser"},
-            }
+            },
         }
         event = IAMCloudTrailEvent.model_validate(data)
         assert event.detail.eventName == "CreateAccessKey"
@@ -127,8 +151,8 @@ class TestIAMCloudTrailEvent:
             "detail": {
                 "eventName": "CreateUser",
                 "userIdentity": {"userName": "x"},
-                "errorCode": "AccessDenied"
-            }
+                "errorCode": "AccessDenied",
+            },
         }
         event = IAMCloudTrailEvent.model_validate(data)
         assert event.detail.errorCode == "AccessDenied"

@@ -5,13 +5,12 @@ and automated response recommendations based on incident patterns.
 """
 
 import logging
-import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger("aws-soar.ml.classifier")
 
 # Known attack pattern signatures for pattern matching
-ATTACK_SIGNATURES: Dict[str, Dict[str, Any]] = {
+ATTACK_SIGNATURES: dict[str, dict[str, Any]] = {
     "crypto_mining": {
         "keywords": ["bitcoin", "crypto", "mining", "xmr", "monero", "coinhive"],
         "severity_weight": 0.9,
@@ -73,11 +72,9 @@ class ThreatClassifier:
 
     def __init__(self) -> None:
         self._attack_db = ATTACK_SIGNATURES
-        self._history: List[Dict[str, Any]] = []
+        self._history: list[dict[str, Any]] = []
 
-    def predict_threat_severity(
-        self, incident_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def predict_threat_severity(self, incident_data: dict[str, Any]) -> dict[str, Any]:
         """
         Predict threat severity and classify the incident.
 
@@ -90,7 +87,7 @@ class ThreatClassifier:
         """
         action = str(incident_data.get("action", "")).lower()
         severity_str = str(incident_data.get("severity", "MEDIUM")).upper()
-        source_ip = str(incident_data.get("source_ip", ""))
+        _source_ip = str(incident_data.get("source_ip", ""))  # noqa: F841
         risk_score = float(incident_data.get("risk_score", 0))
         anomaly_score = float(incident_data.get("anomaly_score", 0))
 
@@ -129,9 +126,7 @@ class ThreatClassifier:
         predicted_severity = self._score_to_severity(predicted_score)
 
         # Confidence = how certain we are (based on data quality)
-        confidence = self._calculate_confidence(
-            pattern_match, risk_score, anomaly_score, ip_reputation
-        )
+        confidence = self._calculate_confidence(pattern_match, risk_score, anomaly_score, ip_reputation)
 
         # Build result
         threat_type = pattern_match["name"] if pattern_match else "unknown"
@@ -156,13 +151,14 @@ class ThreatClassifier:
         self._history.append(result)
         logger.info(
             "Threat classified: type=%s severity=%s score=%.1f confidence=%.0f%%",
-            threat_type, predicted_severity, predicted_score, confidence * 100,
+            threat_type,
+            predicted_severity,
+            predicted_score,
+            confidence * 100,
         )
         return result
 
-    def recommend_response(
-        self, classification: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def recommend_response(self, classification: dict[str, Any]) -> dict[str, Any]:
         """
         Recommend a response strategy based on the classification result.
 
@@ -197,30 +193,26 @@ class ThreatClassifier:
             "recommended_action": action,
             "urgency": urgency,
             "playbook": playbook,
-            "reasoning": (
-                f"Score={score:.1f}, Confidence={confidence:.0%}, "
-                f"ThreatType={threat_type}"
-            ),
+            "reasoning": (f"Score={score:.1f}, Confidence={confidence:.0%}, ThreatType={threat_type}"),
         }
 
     # ---- Private Methods ----
 
-    def _match_attack_pattern(self, action: str) -> Optional[Dict[str, Any]]:
+    def _match_attack_pattern(self, action: str) -> dict[str, Any] | None:
         """Match an action string against known attack signatures."""
-        best_match: Optional[Tuple[str, Dict[str, Any], int]] = None
+        best_match: tuple[str, dict[str, Any], int] | None = None
 
         for name, sig in self._attack_db.items():
             hits = sum(1 for kw in sig["keywords"] if kw in action)
-            if hits > 0:
-                if best_match is None or hits > best_match[2]:
-                    best_match = (name, sig, hits)
+            if hits > 0 and (best_match is None or hits > best_match[2]):  # noqa: SIM102
+                best_match = (name, sig, hits)
 
         if best_match:
             return {"name": best_match[0], **best_match[1]}
         return None
 
     @staticmethod
-    def _assess_ip_risk(incident_data: Dict[str, Any]) -> float:
+    def _assess_ip_risk(incident_data: dict[str, Any]) -> float:
         """Assess IP risk from threat intel data (0.0 = safe, 1.0 = dangerous)."""
         intel = incident_data.get("intel_summary", {})
         vt = intel.get("virustotal", {})
@@ -232,7 +224,7 @@ class ThreatClassifier:
         return (vt_score * 0.6) + (abuse_score * 0.4)
 
     @staticmethod
-    def _temporal_analysis(incident_data: Dict[str, Any]) -> float:
+    def _temporal_analysis(incident_data: dict[str, Any]) -> float:
         """Score based on timing (off-hours = higher risk)."""
         timestamp = str(incident_data.get("timestamp", ""))
         try:
@@ -262,7 +254,7 @@ class ThreatClassifier:
 
     @staticmethod
     def _calculate_confidence(
-        pattern_match: Optional[Dict[str, Any]],
+        pattern_match: dict[str, Any] | None,
         risk_score: float,
         anomaly_score: float,
         ip_reputation: float,
@@ -283,14 +275,14 @@ class ThreatClassifier:
         return evidence_points / max_points
 
     @staticmethod
-    def _generate_playbook(threat_type: str, action: str) -> List[str]:
+    def _generate_playbook(threat_type: str, action: str) -> list[str]:
         """Generate a response playbook based on threat type."""
         common = [
             "1. Collect forensic evidence (logs, snapshots)",
             "2. Notify SOC team via Slack",
         ]
 
-        specific: Dict[str, List[str]] = {
+        specific: dict[str, list[str]] = {
             "crypto_mining": [
                 "3. Terminate mining processes via SSM Run Command",
                 "4. Isolate instance from network",
@@ -318,10 +310,13 @@ class ThreatClassifier:
             ],
         }
 
-        steps = common + specific.get(threat_type, [
-            "3. Investigate the incident manually",
-            "4. Apply standard incident response procedures",
-        ])
+        steps = common + specific.get(
+            threat_type,
+            [
+                "3. Investigate the incident manually",
+                "4. Apply standard incident response procedures",
+            ],
+        )
 
         if action == "AUTO_ISOLATE":
             steps.append("⚡ AUTO-ISOLATION ACTIVATED — resource quarantined")

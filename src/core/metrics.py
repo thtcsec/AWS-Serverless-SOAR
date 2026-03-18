@@ -1,6 +1,6 @@
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+
 from src.clients.aws import AWSClientFacade
 from src.core.config import config
 from src.core.logger import logger
@@ -10,7 +10,7 @@ def emit_metric(
     metric_name: str,
     value: float = 1.0,
     unit: str = "Count",
-    dimensions: Optional[dict] = None,
+    dimensions: dict | None = None,
 ) -> None:
     """Emit a custom CloudWatch metric for SOAR observability."""
     try:
@@ -19,12 +19,10 @@ def emit_metric(
             "MetricName": metric_name,
             "Value": value,
             "Unit": unit,
-            "Timestamp": datetime.now(timezone.utc),
+            "Timestamp": datetime.now(UTC),
         }
         if dimensions:
-            metric_data["Dimensions"] = [
-                {"Name": k, "Value": v} for k, v in dimensions.items()
-            ]
+            metric_data["Dimensions"] = [{"Name": k, "Value": v} for k, v in dimensions.items()]
         cw.put_metric_data(
             Namespace=config.metrics_namespace,
             MetricData=[metric_data],

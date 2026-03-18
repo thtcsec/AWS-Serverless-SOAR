@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("aws-soar.process_containment")
 
@@ -22,25 +22,27 @@ class ProcessContainment:
     def __init__(self, ssm_client: Any) -> None:
         self._ssm = ssm_client
 
-    def list_processes(self, instance_id: str) -> List[Dict[str, str]]:
+    def list_processes(self, instance_id: str) -> list[dict[str, str]]:
         """List running processes on the target EC2 instance."""
         command = "ps aux --sort=-%cpu | head -50"
         output = self._run_command(instance_id, command)
         if not output:
             return []
 
-        processes: List[Dict[str, str]] = []
+        processes: list[dict[str, str]] = []
         lines = output.strip().split("\n")
         for line in lines[1:]:  # Skip header
             parts = line.split(None, 10)
             if len(parts) >= 11:
-                processes.append({
-                    "user": parts[0],
-                    "pid": parts[1],
-                    "cpu": parts[2],
-                    "mem": parts[3],
-                    "command": parts[10],
-                })
+                processes.append(
+                    {
+                        "user": parts[0],
+                        "pid": parts[1],
+                        "cpu": parts[2],
+                        "mem": parts[3],
+                        "command": parts[10],
+                    }
+                )
         return processes
 
     def kill_process(self, instance_id: str, pid: str) -> bool:
@@ -67,20 +69,20 @@ class ProcessContainment:
         output = self._run_command(instance_id, command)
         return output is not None and "QUARANTINED" in output
 
-    def get_containment_report(
-        self, instance_id: str
-    ) -> Dict[str, Any]:
+    def get_containment_report(self, instance_id: str) -> dict[str, Any]:
         """Generate a containment status report for the instance."""
         processes = self.list_processes(instance_id)
 
         suspicious_keywords = [
-            "xmrig", "cryptominer", "minerd", "coinhive",
-            "kinsing", "kdevtmpfsi", "ld-linux",
+            "xmrig",
+            "cryptominer",
+            "minerd",
+            "coinhive",
+            "kinsing",
+            "kdevtmpfsi",
+            "ld-linux",
         ]
-        suspicious = [
-            p for p in processes
-            if any(kw in p.get("command", "").lower() for kw in suspicious_keywords)
-        ]
+        suspicious = [p for p in processes if any(kw in p.get("command", "").lower() for kw in suspicious_keywords)]
 
         return {
             "instance_id": instance_id,
@@ -90,7 +92,7 @@ class ProcessContainment:
             "top_cpu_processes": processes[:5],
         }
 
-    def _run_command(self, instance_id: str, command: str) -> Optional[str]:
+    def _run_command(self, instance_id: str, command: str) -> str | None:
         """Execute a shell command on EC2 via SSM Run Command."""
         try:
             response = self._ssm.send_command(
@@ -112,10 +114,7 @@ class ProcessContainment:
                 if status == "Success":
                     return result.get("StandardOutputContent", "")
                 elif status in ("Failed", "TimedOut", "Cancelled"):
-                    logger.error(
-                        f"SSM command failed on {instance_id}: "
-                        f"{result.get('StandardErrorContent', '')}"
-                    )
+                    logger.error(f"SSM command failed on {instance_id}: {result.get('StandardErrorContent', '')}")
                     return None
 
             logger.error(f"SSM command timed out on {instance_id}")

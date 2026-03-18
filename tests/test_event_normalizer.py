@@ -1,5 +1,7 @@
 """Tests for AWS Unified Event Normalizer."""
+
 import pytest
+
 from src.core.event_normalizer import EventNormalizer, UnifiedIncident
 
 
@@ -30,11 +32,7 @@ class TestEventNormalizerGuardDuty:
                 "type": "Recon:EC2/Portscan",
                 "severity": 8.0,
                 "service": {
-                    "action": {
-                        "networkConnectionAction": {
-                            "remoteIpDetails": {"ipAddressV4": "198.51.100.1"}
-                        }
-                    }
+                    "action": {"networkConnectionAction": {"remoteIpDetails": {"ipAddressV4": "198.51.100.1"}}}
                 },
                 "resource": {
                     "instanceDetails": {"instanceId": "i-0abc123def"},
