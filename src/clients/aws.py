@@ -41,3 +41,23 @@ class AWSClientFacade:
     @lru_cache
     def securityhub(cls) -> Any:
         return boto3.client("securityhub")
+
+    @classmethod
+    @lru_cache
+    def rds(cls) -> Any:
+        return boto3.client("rds")
+
+    @classmethod
+    @lru_cache
+    def eks(cls) -> Any:
+        return boto3.client("eks")
+
+    @classmethod
+    @lru_cache
+    def codepipeline(cls) -> Any:
+        return boto3.client("codepipeline")
+
+    @classmethod
+    @lru_cache
+    def codebuild(cls) -> Any:
+        return boto3.client("codebuild")

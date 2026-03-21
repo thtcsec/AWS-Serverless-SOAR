@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -39,6 +40,7 @@ class UnifiedIncident(BaseModel):
     tags: list[str] = Field(default_factory=list)
     raw_event_type: str = ""
     correlation_keys: list[str] = Field(default_factory=list)
+    trace_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from src.clients.aws import AWSClientFacade
@@ -51,3 +52,28 @@ class PlaybookTimer:
         else:
             emit_metric("PlaybookFailure", 1.0, "Count", dims)
         return False
+
+
+@contextmanager
+def aws_xray_segment(name: str):
+    """Context manager that wraps a code block in an X-Ray subsegment (Nhóm 4).
+
+    Falls back to a no-op if aws_xray_sdk is unavailable or not configured.
+    """
+    try:
+        from aws_xray_sdk.core import xray_recorder  # type: ignore
+
+        with xray_recorder.in_subsegment(name):
+            yield
+    except Exception:
+        # Graceful degradation — X-Ray not configured or not available
+        yield
+
+
+def emit_step_metric(playbook_name: str, step_name: str, duration_ms: float) -> None:
+    """Emit per-step timing metric for detailed playbook observability (Nhóm 4)."""
+    try:
+        metric_name = f"{playbook_name.lower()}.{step_name}_duration_ms"
+        emit_metric(metric_name, duration_ms, "Milliseconds", {"Playbook": playbook_name, "Step": step_name})
+    except Exception as e:
+        logger.warning(f"Failed to emit step metric {step_name}: {e}")

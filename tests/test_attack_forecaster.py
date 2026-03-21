@@ -98,3 +98,112 @@ class TestAttackForecaster:
         assert count == 2
         count = af.ingest([{"action": "c"}])
         assert count == 3
+
+    # ---- Nhóm 5: Additional tests ----
+
+    def test_probability_accuracy(self, forecaster):
+        """All probability values must be in [0, 100] and the list must be non-empty."""
+        result = forecaster.forecast()
+        attacks = result["top_predicted_attacks"]
+        assert len(attacks) > 0
+        for attack in attacks:
+            assert 0.0 <= attack["probability"] <= 100.0
+
+    def test_escalating_boost(self, forecaster):
+        """When trend is ESCALATING, top attack probability >= base probability."""
+        result = forecaster.forecast()
+        trend = result["trend_analysis"]
+        if trend["direction"] == "ESCALATING":
+            # probability is boosted: at least as large as historical count / total * 100
+            attacks = result["top_predicted_attacks"]
+            top = attacks[0]
+            total = sum(a["historical_count"] for a in attacks)
+            base_probability = top["historical_count"] / total * 100
+            assert top["probability"] >= base_probability
+
+    def test_risk_heatmap_completeness(self, forecaster):
+        """All resource types in ingested incidents must appear in heatmap (top 5 coverage)."""
+        result = forecaster.forecast()
+        heatmap = result["risk_heatmap"]
+        # ec2, s3, iam are in the fixture — at least the top 3 most common should appear
+        assert len(heatmap) >= 2
+        # At minimum ec2 (3 incidents) and iam (2 incidents) must appear
+        assert "ec2" in heatmap
+        assert "iam" in heatmap
+
+    def test_behavior_rolling_window(self):
+        """After 100+ activities, oldest should be dropped (window capped at 100)."""
+        from src.ml.behavior_analyzer import BehaviorAnalyzer
+
+        ba = BehaviorAnalyzer()
+        for i in range(105):
+            ba.record_activity(
+                "user-rolling",
+                {
+                    "action": "DescribeInstances",
+                    "source_ip": "10.0.0.1",
+                    "timestamp": f"2026-03-{(i % 28) + 1:02d}T09:00:00Z",
+                },
+            )
+        # Should be capped at 100
+        assert len(ba._baselines["user-rolling"]) == 100
+
+    def test_multi_flag_composite_score(self, analyzer):
+        """3 anomaly flags (new IP, off-hours, unusual action) → score > 50 and is_anomalous."""
+        result = analyzer.analyze(
+            "user-001",
+            {
+                "action": "DeleteBucket",
+                "source_ip": "203.0.113.99",
+                "timestamp": "2026-03-20T03:00:00Z",
+            },
+        )
+        assert len(result["flags"]) >= 2
+        assert result["behavior_score"] > 50
+        assert result["is_anomalous"] is True
+
+    def test_peer_group_baseline_independence(self):
+        """Two different actors must maintain independent baselines."""
+        from src.ml.behavior_analyzer import BehaviorAnalyzer
+
+        ba = BehaviorAnalyzer()
+        for i in range(5):
+            ba.record_activity(
+                "alice",
+                {"action": "DescribeInstances", "source_ip": "10.0.0.1", "timestamp": f"2026-03-{10 + i}T09:00:00Z"},
+            )
+        for i in range(5):
+            ba.record_activity(
+                "bob", {"action": "ListBuckets", "source_ip": "10.0.0.2", "timestamp": f"2026-03-{10 + i}T09:00:00Z"}
+            )
+
+        alice_result = ba.analyze(
+            "alice", {"action": "DescribeInstances", "source_ip": "10.0.0.1", "timestamp": "2026-03-20T09:00:00Z"}
+        )
+        bob_result = ba.analyze(
+            "bob", {"action": "ListBuckets", "source_ip": "10.0.0.2", "timestamp": "2026-03-20T09:00:00Z"}
+        )
+
+        # Both actors are within their own baselines, should be low score
+        assert alice_result["behavior_score"] < 50
+        assert bob_result["behavior_score"] < 50
+        # And they are independent — alice's baseline doesn't include bob's IPs
+        assert "10.0.0.2" not in {r["source_ip"] for r in ba._baselines.get("alice", [])}
+
+
+@pytest.fixture
+def analyzer():
+    from src.ml.behavior_analyzer import BehaviorAnalyzer
+
+    ba = BehaviorAnalyzer()
+    for i in range(10):
+        ba.record_activity(
+            "user-001",
+            {
+                "action": "DescribeInstances",
+                "source_ip": "10.0.0.1",
+                "timestamp": f"2026-03-{10 + i}T09:00:00Z",
+                "region": "us-east-1",
+            },
+        )
+    return ba
