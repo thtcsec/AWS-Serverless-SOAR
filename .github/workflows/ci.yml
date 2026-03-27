@@ -1,0 +1,89 @@
+name: SOAR Enterprise CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install ruff pip-audit
+        
+    - name: Lint with Ruff
+      run: |
+        ruff check src tests
+
+    - name: Check formatting with Ruff
+      run: |
+        ruff format --check src tests
+        
+    - name: Security scan with Bandit
+      run: |
+        bandit -r src -ll -ii
+
+    - name: Dependency vulnerability scan (pip-audit)
+      run: |
+        pip-audit -r requirements.txt --ignore-vuln CVE-2024-23342
+        
+    - name: Type check with Mypy
+      run: |
+        mypy src --ignore-missing-imports
+        
+    - name: Test with pytest and coverage
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+        PYTHONPATH: .
+      run: |
+        pytest --cov=src tests/ --cov-report=xml
+
+  iac_scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.7.5
+
+    - name: Terraform fmt
+      run: |
+        terraform fmt -recursive terraform/
+
+    - name: Terraform fmt (check)
+      run: |
+        terraform fmt -check -recursive terraform/
+
+    - name: Terraform validate (all envs, no backend)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for env in terraform/environments/*; do
+          if [ -d "$env" ]; then
+            echo "Validating: $env"
+            (cd "$env" && terraform init -backend=false -input=false && terraform validate)
+          fi
+        done
+
+    - name: Run Checkov IaC Security Scan
+      uses: bridgecrewio/checkov-action@v12
+      with:
+        directory: terraform/
+        framework: terraform
+        soft_fail: true
+        output_format: cli
