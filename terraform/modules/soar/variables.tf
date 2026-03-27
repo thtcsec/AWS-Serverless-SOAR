@@ -9,37 +9,52 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "isolation_security_group_id" {
-  description = "ID of the isolation security group"
+variable "vpc_cidr" {
+  description = "CIDR block for VPC"
   type        = string
+  default     = "10.0.0.0/16"
 }
 
-variable "worker_security_group_id" {
-  description = "ID of the worker security group"
+variable "public_subnet_cidr" {
+  description = "CIDR block for public subnet"
   type        = string
+  default     = "10.0.1.0/24"
 }
 
-variable "private_subnet_ids" {
-  description = "List of private subnet IDs for ECS tasks"
-  type        = list(string)
-}
-
-variable "container_registry" {
-  description = "Container registry URL"
+variable "ecs_subnet_cidr" {
+  description = "CIDR block for ECS tasks subnet"
   type        = string
-  default     = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+  default     = "10.0.2.0/24"
 }
 
-variable "worker_desired_count" {
-  description = "Desired count of worker containers"
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days"
+  type        = number
+  default     = 30
+}
+
+variable "forensics_worker_count" {
+  description = "Number of forensics worker tasks"
   type        = number
   default     = 2
+}
+
+variable "isolation_worker_count" {
+  description = "Number of isolation worker tasks"
+  type        = number
+  default     = 2
+}
+
+variable "alert_email" {
+  description = "Email address for SNS alerts"
+  type        = string
+  default     = ""
 }
 
 variable "approval_wait_time" {
   description = "Wait time for human approval in seconds"
   type        = number
-  default     = 3600 # 1 hour
+  default     = 3600
 }
 
 variable "tags" {

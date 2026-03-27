@@ -6,3 +6,10 @@ __pycache__/
 .coverage
 coverage.xml
 .venv/
+.env
+.env.local
+.env.*.local
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
