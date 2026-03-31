@@ -13,6 +13,37 @@ variable "tags" {
   }
 }
 
+variable "enable_slack_integration" {
+  description = "Enable Slack integration"
+  type        = bool
+  default     = false
+}
+
+variable "enable_jira_integration" {
+  description = "Enable Jira integration"
+  type        = bool
+  default     = false
+}
+
+variable "enable_siem_integration" {
+  description = "Enable SIEM integration"
+  type        = bool
+  default     = false
+}
+
+variable "siem_endpoint" {
+  description = "SIEM endpoint URL"
+  type        = string
+  default     = ""
+}
+
+variable "siem_api_key" {
+  description = "SIEM API key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "alert_emoji" {
   description = "Alert emoji for Slack notifications"
   type        = string

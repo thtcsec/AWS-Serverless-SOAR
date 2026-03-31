@@ -119,6 +119,12 @@ variable "cross_account_external_id" {
   default     = "soar-cross-account-dev"
 }
 
+variable "soar_account_id" {
+  description = "AWS account ID where SOAR is deployed"
+  type        = string
+  default     = ""
+}
+
 # Integration configuration
 variable "enable_slack_integration" {
   description = "Whether to enable Slack integration"

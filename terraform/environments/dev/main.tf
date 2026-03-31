@@ -94,6 +94,7 @@ module "security" {
   source = "../../modules/security"
 
   environment = var.environment
+  soar_account_id = var.soar_account_id
   
   enable_dev_account_access     = var.enable_dev_account_access
   enable_staging_account_access = var.enable_staging_account_access

@@ -71,3 +71,63 @@ variable "tags" {
     Environment = "production"
   }
 }
+
+variable "enable_dev_account_access" {
+  description = "Enable dev account access"
+  type        = bool
+  default     = false
+}
+
+variable "enable_staging_account_access" {
+  description = "Enable staging account access"
+  type        = bool
+  default     = false
+}
+
+variable "enable_prod_account_access" {
+  description = "Enable prod account access"
+  type        = bool
+  default     = false
+}
+
+variable "dev_account_id" {
+  description = "Dev account ID"
+  type        = string
+  default     = ""
+}
+
+variable "staging_account_id" {
+  description = "Staging account ID"
+  type        = string
+  default     = ""
+}
+
+variable "prod_account_id" {
+  description = "Prod account ID"
+  type        = string
+  default     = ""
+}
+
+variable "dev_account_email" {
+  description = "Dev account email"
+  type        = string
+  default     = ""
+}
+
+variable "staging_account_email" {
+  description = "Staging account email"
+  type        = string
+  default     = ""
+}
+
+variable "prod_account_email" {
+  description = "Prod account email"
+  type        = string
+  default     = ""
+}
+
+variable "cross_account_external_id" {
+  description = "Cross-account external ID"
+  type        = string
+  default     = ""
+}
