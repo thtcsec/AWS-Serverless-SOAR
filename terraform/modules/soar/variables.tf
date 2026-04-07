@@ -66,3 +66,29 @@ variable "tags" {
     Environment = "production"
   }
 }
+
+variable "isolation_security_group_id" {
+  description = "Security group ID for isolation workers"
+  type        = string
+}
+
+variable "worker_security_group_id" {
+  description = "Security group ID for worker tasks"
+  type        = string
+}
+
+variable "private_subnet_ids" {
+  description = "Private subnet IDs for worker tasks"
+  type        = list(string)
+}
+
+variable "container_registry" {
+  description = "ECR container registry URL"
+  type        = string
+}
+
+variable "worker_desired_count" {
+  description = "Desired number of worker tasks"
+  type        = number
+  default     = 1
+}
