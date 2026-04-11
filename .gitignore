@@ -13,3 +13,8 @@ coverage.xml
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
+**/.terraform/*
+
+# Output files — NEVER commit
+*.txt
+!requirements.txt

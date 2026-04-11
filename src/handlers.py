@@ -7,6 +7,7 @@ from src.playbooks.ec2_containment import EC2ContainmentPlaybook
 from src.playbooks.eks_pod_isolation import EKSPodIsolationPlaybook
 from src.playbooks.iam_compromise import IAMCompromisePlaybook
 from src.playbooks.rds_compromise import RDSCompromisePlaybook
+from src.playbooks.ransomware_response import RansomwareResponsePlaybook
 from src.playbooks.registry import registry
 from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
 
@@ -18,6 +19,7 @@ registry.register(RDSCompromisePlaybook())
 registry.register(EKSPodIsolationPlaybook())
 registry.register(CICDSupplyChainPlaybook())
 registry.register(APIGatewayAbusePlaybook())
+registry.register(RansomwareResponsePlaybook())
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
