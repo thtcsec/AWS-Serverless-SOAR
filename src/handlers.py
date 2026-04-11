@@ -6,8 +6,8 @@ from src.playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
 from src.playbooks.ec2_containment import EC2ContainmentPlaybook
 from src.playbooks.eks_pod_isolation import EKSPodIsolationPlaybook
 from src.playbooks.iam_compromise import IAMCompromisePlaybook
-from src.playbooks.rds_compromise import RDSCompromisePlaybook
 from src.playbooks.ransomware_response import RansomwareResponsePlaybook
+from src.playbooks.rds_compromise import RDSCompromisePlaybook
 from src.playbooks.registry import registry
 from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
 
