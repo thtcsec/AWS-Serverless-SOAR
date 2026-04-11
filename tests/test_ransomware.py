@@ -126,9 +126,7 @@ class TestExecuteEC2:
         # Create a VPC + SG for isolation
         vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")
         vpc_id = vpc["Vpc"]["VpcId"]
-        sg = ec2.create_security_group(
-            GroupName="isolation-sg", Description="Isolation SG", VpcId=vpc_id
-        )
+        sg = ec2.create_security_group(GroupName="isolation-sg", Description="Isolation SG", VpcId=vpc_id)
         sg_id = sg["GroupId"]
 
         # Create an instance
