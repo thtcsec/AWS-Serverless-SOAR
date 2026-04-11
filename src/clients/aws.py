@@ -61,3 +61,8 @@ class AWSClientFacade:
     @lru_cache
     def codebuild(cls) -> Any:
         return boto3.client("codebuild")
+
+    @classmethod
+    @lru_cache
+    def wafv2(cls) -> Any:
+        return boto3.client("wafv2")

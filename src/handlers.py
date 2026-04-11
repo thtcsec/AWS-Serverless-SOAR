@@ -1,6 +1,7 @@
 from typing import Any
 
 from src.core.logger import logger
+from src.playbooks.api_gateway_abuse import APIGatewayAbusePlaybook
 from src.playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
 from src.playbooks.ec2_containment import EC2ContainmentPlaybook
 from src.playbooks.eks_pod_isolation import EKSPodIsolationPlaybook
@@ -16,6 +17,7 @@ registry.register(IAMCompromisePlaybook())
 registry.register(RDSCompromisePlaybook())
 registry.register(EKSPodIsolationPlaybook())
 registry.register(CICDSupplyChainPlaybook())
+registry.register(APIGatewayAbusePlaybook())
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:

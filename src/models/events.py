@@ -166,3 +166,31 @@ class CodePipelineEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
     source: str  # "aws.codepipeline" or "aws.codebuild"
     detail: CodePipelineDetail
+
+
+# ---------------------------------------------------------------------------
+# WAF / API Gateway Event Models (Nhóm 4)
+# ---------------------------------------------------------------------------
+
+
+class WAFDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    action: str = ""
+    httpRequest: dict[str, Any] = {}
+    sampledRequests: list[dict[str, Any]] = []
+
+    @property
+    def client_ip(self) -> str | None:
+        return str(self.httpRequest.get("clientIp", "")) if self.httpRequest else None
+
+    @property
+    def is_ddos_abuse(self) -> bool:
+        # Detect if it's hitting limit
+        action_up = self.action.upper()
+        return "LIMIT" in action_up or "BLOCK" in action_up
+
+
+class WAFEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    source: Literal["aws.waf"] = "aws.waf"
+    detail: WAFDetail
