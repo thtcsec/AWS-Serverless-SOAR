@@ -150,7 +150,7 @@ docker compose run --rm attacker
 ```
 
 This will launch an interactive menu allowing you to:
-1. Trigger the EC2 Crypto Miner
+1. Trigger the EC2 Crypto Miner / Ransomware
 2. Trigger S3 Exfiltration
 3. Trigger IAM SSRF Compromise
 
@@ -271,9 +271,11 @@ aws ssm put-parameter --name "/soar/slack/webhook_url" --value "YOUR_WEBHOOK_URL
 
 | Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
 |-------------|-----------|---------------|---------------|-------------------|
-| EC2 Compromise | GuardDuty | < 30s | Scoring Engine | Workflow approval, container forensics |
-| S3 Exfiltration | CloudTrail | < 60s | Scoring Engine | Multi-Intel enrichment, SIEM integration |
+| EC2 Ransomware/Compromise | GuardDuty | < 30s | Scoring Engine | Workflow approval, Snapshot, Isolate |
+| S3 Exfiltration | CloudTrail | < 60s | Scoring Engine | Freeze bucket writes, Multi-Intel |
 | IAM Compromise | CloudTrail | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
+| EKS Pod Compromise | GuardDuty | < 20s | Scoring Engine | Pod Eviction, Quarantine Labels |
+| RDS Abuse | CloudTrail | < 30s | Scoring Engine | Forensic backup, isolate security group |
 | DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
 
 ## 🔧 Configuration
