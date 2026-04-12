@@ -16,10 +16,12 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
     *   **Human Approval:** Slack/Jira integration for human-in-the-loop decisions.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
-*   **Containment Hierarchy (Function > Process > Permissions > Network):**
+*   **Containment Hierarchy (Function > Process > Container > Permission > Network):**
     *   **Process-Level:** Kill malicious processes and quarantine files via SSM Run Command.
+    *   **Container-Level:** Evict compromised EKS pods and apply quarantine network labels.
+    *   **Database-Level:** Initiate RDS forensic snapshots and isolate DB security groups.
     *   **Permissions-Level:** Disable access keys, revoke sessions, attach DenyAll policy.
-    *   **Network-Level:** Isolate instance via Security Group lockdown (last resort).
+    *   **Network-Level:** Isolate EC2 instance via Security Group lockdown (last resort).
 
 ## 2. Response Flow
 

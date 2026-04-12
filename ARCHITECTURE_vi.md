@@ -16,10 +16,12 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
     *   **Phê duyệt con người:** Tích hợp Slack/Jira cho quyết định human-in-the-loop.
     *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident` để tương thích đa nền tảng.
     *   **Tương quan sự cố:** Nhóm các cảnh báo liên quan theo IOC chung (IP, tác nhân, cửa sổ ±5 phút) để phát hiện chiến dịch tấn công đa giai đoạn.
-*   **Hệ thống phân cấp cách ly (Function > Process > Permissions > Network):**
+*   **Hệ thống phân cấp cách ly (Function > Process > Container > Permissions > Network):**
     *   **Tầng Process:** Kill các tiến trình độc hại và cách ly file qua SSM Run Command.
+    *   **Tầng Container:** Trục xuất EKS pod nhiễm mã độc và gắn label cách ly mạng.
+    *   **Tầng Database:** Tự động tạo snapshot RDS phục vụ pháp y số và khóa Security Group.
     *   **Tầng Permissions:** Vô hiệu hóa access key, thu hồi session, gắn policy DenyAll.
-    *   **Tầng Network:** Cách ly instance qua Security Group lockdown (biện pháp cuối cùng).
+    *   **Tầng Network:** Cách ly EC2 instance qua Security Group lockdown (biện pháp cuối cùng).
 
 ## 2. Luồng Phản ứng
 

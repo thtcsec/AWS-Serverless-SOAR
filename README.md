@@ -154,8 +154,6 @@ This will launch an interactive menu allowing you to:
 2. Trigger S3 Exfiltration
 3. Trigger IAM SSRF Compromise
 
-Alternatively, you can run the **Unified MultiCloud Dashboard** from the root of the workspace using Docker Compose. It provides a visual interface to trigger attacks across both AWS and GCP.
-
 ## 🛡️ Advanced Features
 
 ### 🧠 AI/ML Threat Intelligence (Phase 9)
