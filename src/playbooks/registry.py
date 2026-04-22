@@ -13,7 +13,7 @@ class PlaybookRegistry:
     def register(self, playbook: Playbook) -> None:
         self._playbooks.append(playbook)
 
-    def dispatch(self, event_data: dict[str, Any]) -> bool:
+    def dispatch(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         """Finds the applicable playbook and executes it."""
         for playbook in self._playbooks:
             if playbook.can_handle(event_data):

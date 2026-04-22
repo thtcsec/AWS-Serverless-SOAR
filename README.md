@@ -289,6 +289,18 @@ A `.env.example` file is provided in the repository root documenting all OS envi
 - In production, these parameters are securely injected into the Lambda runtime by Terraform.
 - On Windows, run `.\scripts\doctor.ps1` for a quick readiness check of `.venv`, AWS auth, Terraform, Docker, and next-step commands.
 
+### Dry-Run Preview
+Use the playbook preview mode when you want to inspect the remediation plan without changing cloud resources.
+
+```python
+from src.handlers import lambda_handler
+
+event["dry_run"] = True
+preview = lambda_handler(event, None)
+```
+
+The response body includes the selected playbook, target resource, and ordered `planned_actions`.
+
 ### Variables
 - `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
 - `approval_wait_time`: Human approval timeout (prod: 3600s, dev: 300s)
