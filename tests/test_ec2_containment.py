@@ -87,3 +87,55 @@ def test_ec2_containment_playbook_execution(ec2_client):
 
     # Check if security group was swapped
     assert any(g["GroupId"] == sg["GroupId"] for g in instance["SecurityGroups"])
+
+
+def test_ec2_containment_playbook_dry_run_does_not_change_instance(ec2_client):
+    vpc = ec2_client.create_vpc(CidrBlock="10.0.0.0/16")
+    subnet = ec2_client.create_subnet(VpcId=vpc["Vpc"]["VpcId"], CidrBlock="10.0.1.0/24")
+
+    reservation = ec2_client.run_instances(
+        ImageId="ami-12c6146b",
+        MinCount=1,
+        MaxCount=1,
+        InstanceType="t2.micro",
+        SubnetId=subnet["Subnet"]["SubnetId"],
+    )
+    instance_id = reservation["Instances"][0]["InstanceId"]
+
+    mock_event = {
+        "version": "0",
+        "id": "event-id-123",
+        "detail-type": "GuardDuty Finding",
+        "source": "aws.guardduty",
+        "account": "123456789012",
+        "time": "2026-03-01T00:00:00Z",
+        "region": "us-east-1",
+        "resources": [],
+        "dry_run": True,
+        "detail": {
+            "schemaVersion": "2.0",
+            "accountId": "123456789012",
+            "region": "us-east-1",
+            "partition": "aws",
+            "id": "1234567890",
+            "arn": "arn:aws:guardduty:us-east-1:12345:finding/1",
+            "type": "CryptoCurrency:EC2/BitcoinTool.B!DNS",
+            "service": {"resourceRole": "TARGET"},
+            "severity": 8.0,
+            "createdAt": "2026-03-01T00:00:00Z",
+            "updatedAt": "2026-03-01T00:00:00Z",
+            "title": "Crypto mining detected",
+            "description": "Bitcoin mining detected",
+            "resources": [{"instanceDetails": {"instanceId": instance_id}}],
+        },
+    }
+
+    playbook = EC2ContainmentPlaybook()
+    preview = playbook.execute(mock_event)
+
+    assert preview["mode"] == "dry_run"
+    assert preview["playbook"] == "EC2Containment"
+    assert len(preview["planned_actions"]) >= 4
+
+    instance = ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][0]
+    assert instance["State"]["Name"] == "running"

@@ -28,6 +28,21 @@ class TestLambdaHandler:
         assert result["body"] == "Event Ignored"
 
     @patch("src.handlers.registry")
+    def test_dry_run_preview_response(self, mock_registry):
+        from src.handlers import lambda_handler
+
+        mock_registry.dispatch.return_value = {
+            "mode": "dry_run",
+            "playbook": "EC2Containment",
+            "planned_actions": [],
+        }
+
+        result = lambda_handler({"dry_run": True}, None)
+        assert result["statusCode"] == 200
+        assert result["body"]["mode"] == "dry_run"
+        assert result["body"]["playbook"] == "EC2Containment"
+
+    @patch("src.handlers.registry")
     def test_critical_failure(self, mock_registry):
         from src.handlers import lambda_handler
 

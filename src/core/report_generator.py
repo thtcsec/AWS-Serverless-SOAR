@@ -70,6 +70,7 @@ class ReportGenerator:
 | **Risk Score** | {risk_score}/100 |
 | **Decision** | {decision} |
 | **Anomaly Score** | {anomaly_score} |
+| **Decision Summary** | {decision_summary} |
 
 ---
 
@@ -118,6 +119,10 @@ class ReportGenerator:
         risk_score = incident_data.get("risk_score", 0)
         decision = incident_data.get("decision", "N/A")
         anomaly_score = incident_data.get("anomaly_score", "N/A")
+        decision_summary = incident_data.get(
+            "decision_rationale",
+            incident_data.get("summary", "Decision executed using SOAR risk thresholds."),
+        )
         actor = incident_data.get("actor", "N/A")
         timestamp = incident_data.get("timestamp", now.isoformat())
 
@@ -176,6 +181,7 @@ class ReportGenerator:
             risk_score=risk_score,
             decision=decision,
             anomaly_score=anomaly_score,
+            decision_summary=decision_summary,
             recommendations=recs_md,
         )
 

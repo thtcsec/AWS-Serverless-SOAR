@@ -50,6 +50,9 @@ class EC2ContainmentPlaybook(Playbook):
                     logger.error("No instance ID found in GuardDuty finding")
                     return False
 
+                if self._is_dry_run(event_data):
+                    return self._build_preview(instance_id, event.detail.id)
+
                 logger.info(f"Executing EC2 Containment for {instance_id}")
                 emit_metric("FindingsProcessed", 1.0, "Count", {"Playbook": "EC2Containment"})
 
@@ -102,6 +105,61 @@ class EC2ContainmentPlaybook(Playbook):
             except Exception as e:
                 logger.error(f"EC2 Containment failed: {str(e)}", exc_info=True)
                 return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run")
+            or event_data.get("preview_only")
+            or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, instance_id: str, finding_id: str) -> dict[str, Any]:
+        planned_actions = [
+            {
+                "step": 1,
+                "action": "modify_instance_attribute",
+                "target": instance_id,
+                "details": f"Swap security groups to isolation group {self.isolation_sg_id or 'UNCONFIGURED'}",
+            },
+            {
+                "step": 2,
+                "action": "modify_instance_metadata_options",
+                "target": instance_id,
+                "details": "Require IMDSv2 and restrict metadata hop limit.",
+            },
+            {
+                "step": 3,
+                "action": "create_snapshot",
+                "target": instance_id,
+                "details": f"Create forensic snapshots and label them with finding {finding_id}.",
+            },
+            {
+                "step": 4,
+                "action": "stop_instances",
+                "target": instance_id,
+                "details": "Stop the instance after evidence capture completes.",
+            },
+        ]
+        if config.evidence_bucket:
+            planned_actions.append(
+                {
+                    "step": 5,
+                    "action": "s3.put_object",
+                    "target": config.evidence_bucket,
+                    "details": "Upload forensic evidence metadata to the configured evidence bucket.",
+                }
+            )
+
+        logger.info(f"Dry-run preview generated for EC2 containment on {instance_id}")
+        return {
+            "mode": "dry_run",
+            "playbook": "EC2Containment",
+            "target_resource": instance_id,
+            "finding_id": finding_id,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No AWS remediation APIs were executed.",
+        }
 
     def _upload_evidence_metadata(self, instance_id: str, snapshot_id: str, volume_id: str, finding_id: str) -> None:
         """Upload forensic evidence metadata to the S3 evidence bucket."""

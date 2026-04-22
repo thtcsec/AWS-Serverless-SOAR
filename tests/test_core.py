@@ -8,7 +8,7 @@ class TestSOARConfig:
     def test_default_values(self):
         from src.core.config import SOARConfig
 
-        cfg = SOARConfig()
+        cfg = SOARConfig(_env_file=None)
         assert cfg.log_level == "INFO"
         assert cfg.exfiltration_threshold == 10737418240
         assert cfg.sns_topic_arn == ""
@@ -25,8 +25,9 @@ class TestSOARConfig:
                 "SNS_TOPIC_ARN": "arn:aws:sns:us-east-1:123:topic",
                 "EVIDENCE_BUCKET": "my-evidence-bucket",
             },
+            clear=True,
         ):
-            cfg = SOARConfig()
+            cfg = SOARConfig(_env_file=None)
             assert cfg.log_level == "DEBUG"
             assert cfg.sns_topic_arn == "arn:aws:sns:us-east-1:123:topic"
             assert cfg.evidence_bucket == "my-evidence-bucket"

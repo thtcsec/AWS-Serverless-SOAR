@@ -30,14 +30,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Pass the raw event dict to the registry.
         # The registry will let each Playbook determine if it can `can_handle` the event
         # and validate the schema using Pydantic implicitly.
-        success = registry.dispatch(event)
+        result = registry.dispatch(event)
 
-        if success:
+        if isinstance(result, dict):
+            logger.info("SOAR Playbook preview generated successfully.")
+            return {"statusCode": 200, "body": result}
+
+        if result:
             logger.info("SOAR Playbook executed successfully.")
             return {"statusCode": 200, "body": "Remediation Successful"}
-        else:
-            logger.info("Event ignored or no applicable playbook found.")
-            return {"statusCode": 200, "body": "Event Ignored"}
+
+        logger.info("Event ignored or no applicable playbook found.")
+        return {"statusCode": 200, "body": "Event Ignored"}
 
     except Exception as e:
         logger.error(f"Critical Engine Failure: {str(e)}")
