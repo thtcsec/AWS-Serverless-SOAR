@@ -225,3 +225,24 @@ class TestIAMCompromiseExecute:
         }
         result = pb.execute(event)
         assert result is False
+
+    @patch("src.playbooks.iam_compromise.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer):
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+
+        from src.playbooks.iam_compromise import IAMCompromisePlaybook
+
+        pb = IAMCompromisePlaybook.__new__(IAMCompromisePlaybook)
+        pb.iam = MagicMock()
+
+        event = make_iam_cloudtrail_event("CreateAccessKey", "preview-user")
+        event["dry_run"] = True
+
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "IAMCompromise"
+        assert len(result["planned_actions"]) == 4
+        pb.iam.update_access_key.assert_not_called()
+        pb.iam.put_user_policy.assert_not_called()

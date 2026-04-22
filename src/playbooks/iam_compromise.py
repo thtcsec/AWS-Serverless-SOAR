@@ -31,7 +31,7 @@ class IAMCompromisePlaybook(Playbook):
         except ValidationError:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("IAMCompromise"):
             try:
                 event = IAMCloudTrailEvent.model_validate(event_data)
@@ -41,6 +41,9 @@ class IAMCompromisePlaybook(Playbook):
 
                 if not username:
                     return False
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(username, action, source_ip)
 
                 # 1. Threat Intel & Scoring
                 intel_report = {}
@@ -88,6 +91,47 @@ class IAMCompromisePlaybook(Playbook):
                 return False
 
             return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(username: str, action: str, source_ip: str) -> dict[str, Any]:
+        return {
+            "mode": "dry_run",
+            "playbook": "IAMCompromise",
+            "target_resource": username,
+            "summary": "Preview only. No IAM credentials or policies were changed.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "risk_assessment",
+                    "target": username,
+                    "details": f"Evaluate risky IAM action '{action}' from source IP '{source_ip or 'unknown'}'.",
+                },
+                {
+                    "step": 2,
+                    "action": "disable_access_keys",
+                    "target": username,
+                    "details": "Disable all active user access keys if decision reaches AUTO_ISOLATE.",
+                },
+                {
+                    "step": 3,
+                    "action": "put_user_policy",
+                    "target": username,
+                    "details": "Attach explicit DenyAll policy to revoke active permissions and sessions.",
+                },
+                {
+                    "step": 4,
+                    "action": "notify_slack",
+                    "target": username,
+                    "details": "Notify operators with risk score, action, and decision path.",
+                },
+            ],
+        }
 
     def _disable_access_keys(self, username: str) -> None:
         """Disables all active access keys for the user."""
