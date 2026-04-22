@@ -20,6 +20,7 @@ def sample_incident():
         "resource_type": "ec2",
         "risk_score": 85.0,
         "decision": "AUTO_ISOLATE",
+        "decision_rationale": "Score 85.0 mapped to AUTO_ISOLATE using SOAR thresholds.",
         "anomaly_score": -0.8,
         "timestamp": "2026-03-11T12:00:00Z",
         "intel_summary": {
@@ -43,6 +44,7 @@ class TestReportGenerator:
         assert "198.51.100.10" in content
         assert "85.0" in content
         assert "AUTO_ISOLATE" in content
+        assert "Score 85.0 mapped to AUTO_ISOLATE" in content
 
     def test_report_with_custom_actions(self, sample_incident, tmp_path):
         actions = [
@@ -67,3 +69,7 @@ class TestReportGenerator:
         result = ReportGenerator.generate({}, output_dir=str(tmp_path))
         assert "UNKNOWN" in result["report_content"]
         assert os.path.exists(result["report_path"])
+
+    def test_report_uses_default_decision_summary_when_missing(self, tmp_path):
+        result = ReportGenerator.generate({"decision": "IGNORE"}, output_dir=str(tmp_path))
+        assert "Decision executed using SOAR risk thresholds." in result["report_content"]

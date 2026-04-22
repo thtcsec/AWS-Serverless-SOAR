@@ -234,6 +234,7 @@ def notify_team(instance_id, finding_type, severity, risk_data=None, intel_repor
         score_info = (
             f"\nRisk Score: {risk_data['risk_score']}/100\n"
             f"Decision: {risk_data['decision']}\n"
+            f"Decision Summary: {risk_data.get('summary', 'N/A')}\n"
             f"VT Malicious: {risk_data['breakdown'].get('vt_malicious')}\n"
             f"AbuseIPDB Score: {risk_data['breakdown'].get('abuse_confidence')}\n"
         )
