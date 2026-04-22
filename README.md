@@ -260,6 +260,9 @@ terraform/
 git clone https://github.com/thtcsec/AWS-Serverless-SOAR.git
 cd AWS-Serverless-SOAR
 
+# Optional: quick local diagnostics on Windows / PowerShell
+.\scripts\doctor.ps1
+
 # 2. Run the deployment script (deploys Terraform, builds Fargate containers, sets up SSM)
 ./scripts/deploy.sh prod deploy
 
@@ -284,6 +287,7 @@ aws ssm put-parameter --name "/soar/slack/webhook_url" --value "YOUR_WEBHOOK_URL
 A `.env.example` file is provided in the repository root documenting all OS environment variables used by the playbooks. 
 - For local testing, copy this file to `.env` and adjust the values.
 - In production, these parameters are securely injected into the Lambda runtime by Terraform.
+- On Windows, run `.\scripts\doctor.ps1` for a quick readiness check of `.venv`, AWS auth, Terraform, Docker, and next-step commands.
 
 ### Variables
 - `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
