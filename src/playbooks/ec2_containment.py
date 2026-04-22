@@ -36,7 +36,7 @@ class EC2ContainmentPlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("EC2Containment"):
             try:
                 event = GuardDutyEvent.model_validate(event_data)
