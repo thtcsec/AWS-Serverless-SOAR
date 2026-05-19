@@ -201,3 +201,28 @@ class TestEdgeCases:
         ):
             pb = RansomwareResponsePlaybook()
             assert pb.execute(event) is False
+
+
+class TestRansomwareDryRun:
+    def test_execute_dry_run_preview_ec2(self):
+        event = _make_ransomware_event()
+        event["dry_run"] = True
+
+        pb = RansomwareResponsePlaybook()
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "RansomwareResponse"
+        assert result["target_resource"] == "i-0abcdef1234567890"
+        assert len(result["planned_actions"]) == 3
+
+    def test_execute_dry_run_preview_s3(self):
+        event = _make_s3_ransomware_event()
+        event["dry_run"] = True
+
+        pb = RansomwareResponsePlaybook()
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["target_resource"] == "victim-bucket"
+        assert len(result["planned_actions"]) == 2

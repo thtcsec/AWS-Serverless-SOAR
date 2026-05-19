@@ -192,3 +192,24 @@ class TestRDSCompromiseExecute:
         assert AuditAction.SNAPSHOT_DB == "SNAPSHOT_DB"
         assert AuditAction.ISOLATE_DB == "ISOLATE_DB"
         assert AuditAction.STOP_DB_INSTANCE == "STOP_DB_INSTANCE"
+
+
+class TestRDSCompromiseDryRun:
+    @patch("src.playbooks.rds_compromise.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer):
+        mock_timer.return_value.__enter__ = MagicMock(return_value=None)
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+
+        from src.playbooks.rds_compromise import RDSCompromisePlaybook
+
+        pb = RDSCompromisePlaybook.__new__(RDSCompromisePlaybook)
+        pb.isolation_sg_id = "sg-isolation123"
+
+        event = make_rds_cloudtrail_event("ModifyDBInstance")
+        event["dry_run"] = True
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "RDSCompromise"
+        assert result["target_resource"] == "mydb"
+        assert len(result["planned_actions"]) == 4

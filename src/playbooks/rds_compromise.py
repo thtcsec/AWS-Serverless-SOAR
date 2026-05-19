@@ -40,7 +40,7 @@ class RDSCompromisePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("RDSCompromise"):
             try:
                 event = RDSCloudTrailEvent.model_validate(event_data)
@@ -51,6 +51,9 @@ class RDSCompromisePlaybook(Playbook):
                 if not db_id:
                     logger.error("No dbInstanceIdentifier found in RDS CloudTrail event")
                     return False
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(db_id, event_name, source_ip)
 
                 logger.info(f"Executing RDS Compromise playbook for {db_id} (action={event_name})")
                 self.audit.log(AuditAction.PLAYBOOK_STARTED, db_id, details={"event": event_name})
@@ -185,3 +188,43 @@ class RDSCompromisePlaybook(Playbook):
             notifier.send_incident_alert(incident_data)
         except Exception as e:
             logger.warning(f"Failed to send Slack notification: {e}")
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, db_id: str, event_name: str, source_ip: str) -> dict[str, Any]:
+        return {
+            "mode": "dry_run",
+            "playbook": "RDSCompromise",
+            "target_resource": db_id,
+            "summary": "Preview only. No RDS snapshots or security groups were modified.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "risk_assessment",
+                    "target": db_id,
+                    "details": f"Evaluate risky RDS action '{event_name}' from source IP '{source_ip or 'unknown'}'.",
+                },
+                {
+                    "step": 2,
+                    "action": "create_db_snapshot",
+                    "target": db_id,
+                    "details": "Create forensic DB snapshot before isolation if decision reaches AUTO_ISOLATE.",
+                },
+                {
+                    "step": 3,
+                    "action": "modify_db_instance",
+                    "target": db_id,
+                    "details": f"Apply isolation security group {self.isolation_sg_id or 'UNCONFIGURED'}.",
+                },
+                {
+                    "step": 4,
+                    "action": "notify_slack",
+                    "target": db_id,
+                    "details": "Notify operators with risk score and decision path.",
+                },
+            ],
+        }

@@ -174,3 +174,22 @@ class TestEKSPodIsolationExecute:
         assert AuditAction.EVICT_POD == "EVICT_POD"
         assert AuditAction.APPLY_NETWORK_POLICY == "APPLY_NETWORK_POLICY"
         assert AuditAction.COLLECT_POD_LOGS == "COLLECT_POD_LOGS"
+
+
+class TestEKSPodIsolationDryRun:
+    @patch("src.playbooks.eks_pod_isolation.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer):
+        mock_timer.return_value.__enter__ = MagicMock(return_value=None)
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+
+        from src.playbooks.eks_pod_isolation import EKSPodIsolationPlaybook
+
+        pb = EKSPodIsolationPlaybook.__new__(EKSPodIsolationPlaybook)
+        event = make_eks_guardduty_event(severity=8.0)
+        event["dry_run"] = True
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "EKSPodIsolation"
+        assert result["decision"] == "AUTO_ISOLATE"
+        assert len(result["planned_actions"]) == 3
