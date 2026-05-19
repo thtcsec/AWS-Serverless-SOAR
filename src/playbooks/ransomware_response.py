@@ -54,10 +54,13 @@ class RansomwareResponsePlaybook(Playbook):
         except (ValidationError, Exception):
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("RansomwareResponse"):
             try:
                 event = GuardDutyEvent.model_validate(event_data)
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(event)
 
                 logger.info(
                     "Executing Ransomware Response Playbook",
@@ -95,6 +98,77 @@ class RansomwareResponsePlaybook(Playbook):
                         success=False,
                     )
                 return False
+
+    # ------------------------------------------------------------------ #
+    # Dry-run helpers
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, event: GuardDutyEvent) -> dict[str, Any]:
+        instance_id = self._extract_instance_id(event)
+        bucket_name = self._extract_bucket_name(event)
+        planned_actions: list[dict[str, Any]] = []
+        step = 1
+
+        if instance_id:
+            planned_actions.extend(
+                [
+                    {
+                        "step": step,
+                        "action": "create_snapshot",
+                        "target": instance_id,
+                        "details": "Snapshot all EBS volumes attached to the instance.",
+                    },
+                    {
+                        "step": step + 1,
+                        "action": "modify_instance_attribute",
+                        "target": instance_id,
+                        "details": (
+                            f"Swap security groups to isolation SG {os.environ.get('ISOLATION_SG_ID', 'UNCONFIGURED')}."
+                        ),
+                    },
+                    {
+                        "step": step + 2,
+                        "action": "stop_instances",
+                        "target": instance_id,
+                        "details": "Stop the instance to halt lateral movement.",
+                    },
+                ]
+            )
+            step += 3
+        if bucket_name:
+            planned_actions.extend(
+                [
+                    {
+                        "step": step,
+                        "action": "put_bucket_versioning",
+                        "target": bucket_name,
+                        "details": "Enable S3 bucket versioning.",
+                    },
+                    {
+                        "step": step + 1,
+                        "action": "put_bucket_policy",
+                        "target": bucket_name,
+                        "details": "Apply DenyAll freeze policy to block writes and deletes.",
+                    },
+                ]
+            )
+
+        target = instance_id or bucket_name or event.detail.id
+        return {
+            "mode": "dry_run",
+            "playbook": "RansomwareResponse",
+            "target_resource": target,
+            "finding_id": event.detail.id,
+            "finding_type": event.detail.type,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No EC2 or S3 remediation APIs were executed.",
+        }
 
     # ------------------------------------------------------------------ #
     # Resource extraction helpers

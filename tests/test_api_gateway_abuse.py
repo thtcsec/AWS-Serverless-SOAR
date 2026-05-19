@@ -64,3 +64,14 @@ def test_execute_no_config(waf_abuse_event):
     playbook = APIGatewayAbusePlaybook()
     result = playbook.execute(waf_abuse_event)
     assert result is False
+
+
+def test_execute_dry_run_preview(waf_abuse_event):
+    waf_abuse_event["dry_run"] = True
+    playbook = APIGatewayAbusePlaybook()
+    result = playbook.execute(waf_abuse_event)
+
+    assert result["mode"] == "dry_run"
+    assert result["playbook"] == "APIGatewayAbuse"
+    assert result["target_resource"] == "192.168.1.100"
+    assert len(result["planned_actions"]) == 2

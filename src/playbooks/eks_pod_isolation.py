@@ -36,7 +36,7 @@ class EKSPodIsolationPlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("EKSPodIsolation"):
             try:
                 event = EKSGuardDutyEvent.model_validate(event_data)
@@ -55,6 +55,9 @@ class EKSPodIsolationPlaybook(Playbook):
                 if not cluster_name:
                     logger.error("No EKS cluster name found in GuardDuty finding")
                     return False
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(cluster_name, namespace, pod_name, finding_type, severity)
 
                 logger.info(f"Executing EKS Pod Isolation for cluster={cluster_name}, pod={pod_name}")
                 self.audit.log(
@@ -103,6 +106,57 @@ class EKSPodIsolationPlaybook(Playbook):
         elif severity >= 4.0:
             return "REQUIRE_APPROVAL"
         return "IGNORE"
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(
+        cluster_name: str,
+        namespace: str,
+        pod_name: str,
+        finding_type: str,
+        severity: float,
+    ) -> dict[str, Any]:
+        decision = EKSPodIsolationPlaybook._severity_decision(severity)
+        planned_actions = [
+            {
+                "step": 1,
+                "action": "severity_decision",
+                "target": cluster_name,
+                "details": f"Map severity {severity} to decision '{decision}' for finding '{finding_type}'.",
+            },
+        ]
+        if pod_name:
+            planned_actions.append(
+                {
+                    "step": 2,
+                    "action": "collect_pod_logs",
+                    "target": f"{cluster_name}/{namespace}/{pod_name}",
+                    "details": "Upload pod evidence metadata to the configured S3 evidence bucket.",
+                }
+            )
+            if decision in ("AUTO_ISOLATE", "REQUIRE_APPROVAL"):
+                planned_actions.append(
+                    {
+                        "step": 3,
+                        "action": "kubectl_label",
+                        "target": f"{cluster_name}/{namespace}/{pod_name}",
+                        "details": "Apply soar-quarantine=true label to isolate the pod.",
+                    }
+                )
+
+        return {
+            "mode": "dry_run",
+            "playbook": "EKSPodIsolation",
+            "target_resource": f"{cluster_name}/{namespace}/{pod_name or 'unknown'}",
+            "decision": decision,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No EKS or kubectl remediation was executed.",
+        }
 
     def _apply_quarantine_label(self, cluster_name: str, namespace: str, pod_name: str) -> None:
         """Label pod for quarantine via EKS API (kubectl-equivalent via boto3)."""

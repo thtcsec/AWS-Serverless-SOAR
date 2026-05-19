@@ -176,3 +176,23 @@ class TestCICDSupplyChainExecute:
         assert AuditAction.DISABLE_PIPELINE == "DISABLE_PIPELINE"
         assert AuditAction.STOP_BUILD == "STOP_BUILD"
         assert AuditAction.QUARANTINE_ARTIFACT == "QUARANTINE_ARTIFACT"
+
+
+class TestCICDSupplyChainDryRun:
+    @patch("src.playbooks.cicd_supply_chain.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer):
+        mock_timer.return_value.__enter__ = MagicMock(return_value=None)
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+
+        from src.playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
+
+        pb = CICDSupplyChainPlaybook.__new__(CICDSupplyChainPlaybook)
+        event = make_codepipeline_event("UpdatePipeline")
+        event["dry_run"] = True
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "CICDSupplyChain"
+        assert result["target_resource"] == "my-pipeline"
+        assert result["decision"] in ("AUTO_ISOLATE", "REQUIRE_APPROVAL", "IGNORE")
+        assert len(result["planned_actions"]) >= 1

@@ -112,3 +112,24 @@ class TestS3ExfiltrationExecute:
         }
         result = pb.execute(event)
         assert result is False
+
+    @patch("src.playbooks.s3_exfiltration.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer):
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+
+        from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
+
+        pb = S3ExfiltrationPlaybook.__new__(S3ExfiltrationPlaybook)
+        pb.s3 = MagicMock()
+
+        event = make_s3_cloudtrail_event("GetObject", "target-bucket", "arn:aws:iam::123456789012:user/attacker")
+        event["dry_run"] = True
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "S3Exfiltration"
+        assert result["target_resource"] == "target-bucket"
+        assert len(result["planned_actions"]) == 3
+        pb.s3.put_bucket_policy.assert_not_called()
+        pb.s3.put_bucket_versioning.assert_not_called()

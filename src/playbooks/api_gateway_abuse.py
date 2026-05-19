@@ -37,7 +37,7 @@ class APIGatewayAbusePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("APIGatewayAbuse"):
             try:
                 event = WAFEvent.model_validate(event_data)
@@ -46,6 +46,9 @@ class APIGatewayAbusePlaybook(Playbook):
                 if not client_ip:
                     logger.error("No client IP found in WAF finding")
                     return False
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(client_ip)
 
                 logger.info(f"Executing API Gateway Abuse Playbook for IP={client_ip}")
                 self.audit.log(
@@ -74,6 +77,35 @@ class APIGatewayAbusePlaybook(Playbook):
                 return False
 
         return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, client_ip: str) -> dict[str, Any]:
+        target_ip = f"{client_ip}/32" if ":" not in client_ip else f"{client_ip}/128"
+        return {
+            "mode": "dry_run",
+            "playbook": "APIGatewayAbuse",
+            "target_resource": client_ip,
+            "summary": "Preview only. No WAF IPSet blocklist was updated.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "get_ip_set",
+                    "target": self.ip_set_name or "UNCONFIGURED",
+                    "details": f"Fetch current WAF IPSet {self.ip_set_id or 'UNCONFIGURED'} lock token.",
+                },
+                {
+                    "step": 2,
+                    "action": "update_ip_set",
+                    "target": target_ip,
+                    "details": f"Add {target_ip} to WAF blocklist scope {self.ip_set_scope}.",
+                },
+            ],
+        }
 
     def _block_ip(self, target_ip: str) -> None:
         """Add the offending IP to the WAF IPSet blocklist."""

@@ -39,7 +39,7 @@ class CICDSupplyChainPlaybook(Playbook):
         except (ValidationError, Exception):
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("CICDSupplyChain"):
             try:
                 event = CodePipelineEvent.model_validate(event_data)
@@ -54,6 +54,11 @@ class CICDSupplyChainPlaybook(Playbook):
                 pipeline_name = params.get("name", params.get("pipeline", {}).get("name", ""))
                 build_id = params.get("id", "")
                 resource_id = pipeline_name or build_id or "unknown"
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(
+                        source, resource_id, event_name, source_ip, actor, pipeline_name, build_id
+                    )
 
                 logger.info(f"Executing CI/CD Supply Chain playbook: source={source}, event={event_name}")
                 self.audit.log(
@@ -109,6 +114,72 @@ class CICDSupplyChainPlaybook(Playbook):
                 return False
 
         return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(
+        source: str,
+        resource_id: str,
+        event_name: str,
+        source_ip: str,
+        actor: str,
+        pipeline_name: str,
+        build_id: str,
+    ) -> dict[str, Any]:
+        risk_score = CICDSupplyChainPlaybook._behavior_score(source_ip, actor, event_name)
+        decision = "AUTO_ISOLATE" if risk_score >= 70 else "REQUIRE_APPROVAL" if risk_score >= 40 else "IGNORE"
+        planned_actions = [
+            {
+                "step": 1,
+                "action": "behavior_score",
+                "target": resource_id,
+                "details": (
+                    f"Score CI/CD event '{event_name}' from actor '{actor}' (score={risk_score}, decision={decision})."
+                ),
+            },
+        ]
+        if decision != "IGNORE":
+            if source == "aws.codepipeline" and pipeline_name:
+                planned_actions.append(
+                    {
+                        "step": 2,
+                        "action": "disable_stage_transition",
+                        "target": pipeline_name,
+                        "details": "Disable pipeline stage transitions if AUTO_ISOLATE is reached.",
+                    }
+                )
+            if source == "aws.codebuild" and build_id:
+                planned_actions.append(
+                    {
+                        "step": len(planned_actions) + 1,
+                        "action": "stop_build",
+                        "target": build_id,
+                        "details": "Stop the active build if AUTO_ISOLATE is reached.",
+                    }
+                )
+            planned_actions.append(
+                {
+                    "step": len(planned_actions) + 1,
+                    "action": "notify_slack",
+                    "target": resource_id,
+                    "details": "Notify operators with risk score and decision path.",
+                }
+            )
+
+        return {
+            "mode": "dry_run",
+            "playbook": "CICDSupplyChain",
+            "target_resource": resource_id,
+            "decision": decision,
+            "risk_score": risk_score,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No CodePipeline, CodeBuild, or S3 remediation was executed.",
+        }
 
     @staticmethod
     def _behavior_score(source_ip: str, actor: str, event_name: str) -> float:
