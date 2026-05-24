@@ -217,22 +217,56 @@ class EKSPodIsolationPlaybook(Playbook):
             log_tail = int(os.environ.get("EKS_POD_LOG_TAIL", "2000"))
             log_since = os.environ.get("EKS_POD_LOG_SINCE", "1h")
             log_timeout = int(os.environ.get("EKS_POD_LOG_TIMEOUT", "60"))
+            include_previous = os.environ.get("EKS_POD_LOG_PREVIOUS", "false").lower() in ("1", "true", "yes")
+            include_describe = os.environ.get("EKS_POD_DESCRIBE", "true").lower() not in ("0", "false", "no")
+            include_events = os.environ.get("EKS_POD_EVENTS", "true").lower() not in ("0", "false", "no")
+
+            def run_kubectl(args: list[str]) -> tuple[str, str]:
+                try:
+                    result = subprocess.run(args, capture_output=True, text=True, timeout=log_timeout)
+                    if result.returncode == 0:
+                        return result.stdout, ""
+                    return "", result.stderr or f"kubectl exited with code {result.returncode}"
+                except Exception as exc:
+                    return "", str(exc)
 
             logs_output = ""
             log_error = ""
             log_cmd = ["kubectl", "--namespace", namespace, "logs", pod_name, "--tail", str(log_tail)]
             if log_since:
                 log_cmd.extend(["--since", log_since])
-            try:
-                result = subprocess.run(log_cmd, capture_output=True, text=True, timeout=log_timeout)
-                if result.returncode == 0:
-                    logs_output = result.stdout
-                else:
-                    log_error = result.stderr or f"kubectl logs exited with code {result.returncode}"
-            except Exception as exc:
-                log_error = str(exc)
+            logs_output, log_error = run_kubectl(log_cmd)
 
-            evidence = {
+            prev_output = ""
+            prev_error = ""
+            if include_previous:
+                prev_cmd = log_cmd + ["--previous"]
+                prev_output, prev_error = run_kubectl(prev_cmd)
+
+            describe_output = ""
+            describe_error = ""
+            if include_describe:
+                describe_cmd = ["kubectl", "--namespace", namespace, "describe", "pod", pod_name]
+                describe_output, describe_error = run_kubectl(describe_cmd)
+
+            events_output = ""
+            events_error = ""
+            if include_events:
+                events_cmd = [
+                    "kubectl",
+                    "--namespace",
+                    namespace,
+                    "get",
+                    "events",
+                    "--field-selector",
+                    f"involvedObject.name={pod_name},involvedObject.kind=Pod",
+                    "--sort-by=.metadata.creationTimestamp",
+                ]
+                events_output, events_error = run_kubectl(events_cmd)
+
+            artifacts: dict[str, str] = {}
+            errors: dict[str, str] = {}
+            evidence: dict[str, Any] = {
                 "cluster_name": cluster_name,
                 "namespace": namespace,
                 "pod_name": pod_name,
@@ -241,22 +275,46 @@ class EKSPodIsolationPlaybook(Playbook):
                 "log_collected": bool(logs_output),
                 "log_tail": log_tail,
                 "log_since": log_since,
-                "log_error": log_error or None,
+                "include_previous": include_previous,
+                "include_describe": include_describe,
+                "include_events": include_events,
+                "artifacts": artifacts,
+                "errors": errors,
             }
             key_prefix = f"evidence/eks/{cluster_name}/{namespace}/{pod_name}/{finding_id}"
             meta_key = f"{key_prefix}.json"
             log_key = f"{key_prefix}.log"
+            prev_key = f"{key_prefix}.previous.log"
+            describe_key = f"{key_prefix}.describe.txt"
+            events_key = f"{key_prefix}.events.txt"
             bucket = self.evidence_bucket or config.evidence_bucket
             if bucket:
                 if logs_output:
                     self.s3.put_object(Bucket=bucket, Key=log_key, Body=logs_output.encode("utf-8"))
-                    evidence["log_s3_key"] = log_key
+                    artifacts["logs"] = log_key
+                elif log_error:
+                    errors["logs"] = log_error
+                if prev_output:
+                    self.s3.put_object(Bucket=bucket, Key=prev_key, Body=prev_output.encode("utf-8"))
+                    artifacts["previous_logs"] = prev_key
+                elif prev_error:
+                    errors["previous_logs"] = prev_error
+                if describe_output:
+                    self.s3.put_object(Bucket=bucket, Key=describe_key, Body=describe_output.encode("utf-8"))
+                    artifacts["describe"] = describe_key
+                elif describe_error:
+                    errors["describe"] = describe_error
+                if events_output:
+                    self.s3.put_object(Bucket=bucket, Key=events_key, Body=events_output.encode("utf-8"))
+                    artifacts["events"] = events_key
+                elif events_error:
+                    errors["events"] = events_error
                 self.s3.put_object(Bucket=bucket, Key=meta_key, Body=json.dumps(evidence))
                 logger.info(f"Uploaded EKS pod evidence to s3://{bucket}/{meta_key}")
             self.audit.log(
                 AuditAction.COLLECT_POD_LOGS,
                 f"{cluster_name}/{namespace}/{pod_name}",
-                details={"s3_key": meta_key, "log_s3_key": evidence.get("log_s3_key", "")},
+                details={"s3_key": meta_key, "artifacts": evidence.get("artifacts", {})},
             )
         except Exception as e:
             logger.warning(f"Failed to collect pod logs for {pod_name}: {e}")
