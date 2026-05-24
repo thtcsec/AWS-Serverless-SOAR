@@ -142,14 +142,14 @@ data "archive_file" "lambda_zip" {
 }
 
 resource "aws_lambda_function" "soar_responder" {
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "soar-incident-responder"
-  role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.12"
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
-  memory_size      = var.lambda_memory_size
-  timeout          = var.lambda_timeout
+  filename                       = data.archive_file.lambda_zip.output_path
+  function_name                  = "soar-incident-responder"
+  role                           = aws_iam_role.lambda_exec_role.arn
+  handler                        = "lambda_function.lambda_handler"
+  runtime                        = "python3.12"
+  source_code_hash               = data.archive_file.lambda_zip.output_base64sha256
+  memory_size                    = var.lambda_memory_size
+  timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
   tracing_config {
@@ -212,14 +212,14 @@ data "archive_file" "iam_lambda_zip" {
 }
 
 resource "aws_lambda_function" "iam_soar_responder" {
-  filename         = data.archive_file.iam_lambda_zip.output_path
-  function_name    = "iam-soar-incident-responder"
-  role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "iam_compromise_response.lambda_handler"
-  runtime          = "python3.12"
-  source_code_hash = data.archive_file.iam_lambda_zip.output_base64sha256
-  memory_size      = var.lambda_memory_size
-  timeout          = var.lambda_timeout
+  filename                       = data.archive_file.iam_lambda_zip.output_path
+  function_name                  = "iam-soar-incident-responder"
+  role                           = aws_iam_role.lambda_exec_role.arn
+  handler                        = "iam_compromise_response.lambda_handler"
+  runtime                        = "python3.12"
+  source_code_hash               = data.archive_file.iam_lambda_zip.output_base64sha256
+  memory_size                    = var.lambda_memory_size
+  timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
   tracing_config {
@@ -228,7 +228,7 @@ resource "aws_lambda_function" "iam_soar_responder" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
+      SNS_TOPIC_ARN = aws_sns_topic.soar_alerts.arn
     }
   }
 
@@ -271,14 +271,14 @@ data "archive_file" "s3_lambda_zip" {
 }
 
 resource "aws_lambda_function" "s3_soar_responder" {
-  filename         = data.archive_file.s3_lambda_zip.output_path
-  function_name    = "s3-soar-incident-responder"
-  role             = aws_iam_role.lambda_exec_role.arn
-  handler          = "s3_exfiltration_response.lambda_handler"
-  runtime          = "python3.12"
-  source_code_hash = data.archive_file.s3_lambda_zip.output_base64sha256
-  memory_size      = var.lambda_memory_size
-  timeout          = var.lambda_timeout
+  filename                       = data.archive_file.s3_lambda_zip.output_path
+  function_name                  = "s3-soar-incident-responder"
+  role                           = aws_iam_role.lambda_exec_role.arn
+  handler                        = "s3_exfiltration_response.lambda_handler"
+  runtime                        = "python3.12"
+  source_code_hash               = data.archive_file.s3_lambda_zip.output_base64sha256
+  memory_size                    = var.lambda_memory_size
+  timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
 
   tracing_config {
@@ -287,7 +287,7 @@ resource "aws_lambda_function" "s3_soar_responder" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
+      SNS_TOPIC_ARN = aws_sns_topic.soar_alerts.arn
     }
   }
 

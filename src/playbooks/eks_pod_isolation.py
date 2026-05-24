@@ -206,12 +206,31 @@ class EKSPodIsolationPlaybook(Playbook):
             logger.warning(f"Failed to apply quarantine label to {pod_name}: {e}")
 
     def _collect_pod_logs(self, cluster_name: str, namespace: str, pod_name: str, finding_id: str) -> None:
-        """Upload pod log placeholder to S3 evidence bucket."""
+        """Collect pod logs with kubectl and upload evidence to S3."""
         try:
             import json
+            import subprocess
             from datetime import UTC, datetime
 
             from src.core.config import config
+
+            log_tail = int(os.environ.get("EKS_POD_LOG_TAIL", "2000"))
+            log_since = os.environ.get("EKS_POD_LOG_SINCE", "1h")
+            log_timeout = int(os.environ.get("EKS_POD_LOG_TIMEOUT", "60"))
+
+            logs_output = ""
+            log_error = ""
+            log_cmd = ["kubectl", "--namespace", namespace, "logs", pod_name, "--tail", str(log_tail)]
+            if log_since:
+                log_cmd.extend(["--since", log_since])
+            try:
+                result = subprocess.run(log_cmd, capture_output=True, text=True, timeout=log_timeout)
+                if result.returncode == 0:
+                    logs_output = result.stdout
+                else:
+                    log_error = result.stderr or f"kubectl logs exited with code {result.returncode}"
+            except Exception as exc:
+                log_error = str(exc)
 
             evidence = {
                 "cluster_name": cluster_name,
@@ -219,17 +238,25 @@ class EKSPodIsolationPlaybook(Playbook):
                 "pod_name": pod_name,
                 "finding_id": finding_id,
                 "collected_at": datetime.now(UTC).isoformat(),
-                "note": "Pod log collection placeholder — attach kubectl logs output",
+                "log_collected": bool(logs_output),
+                "log_tail": log_tail,
+                "log_since": log_since,
+                "log_error": log_error or None,
             }
-            key = f"evidence/eks/{cluster_name}/{namespace}/{pod_name}/{finding_id}.json"
+            key_prefix = f"evidence/eks/{cluster_name}/{namespace}/{pod_name}/{finding_id}"
+            meta_key = f"{key_prefix}.json"
+            log_key = f"{key_prefix}.log"
             bucket = self.evidence_bucket or config.evidence_bucket
             if bucket:
-                self.s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(evidence))
-                logger.info(f"Uploaded EKS pod evidence to s3://{bucket}/{key}")
+                if logs_output:
+                    self.s3.put_object(Bucket=bucket, Key=log_key, Body=logs_output.encode("utf-8"))
+                    evidence["log_s3_key"] = log_key
+                self.s3.put_object(Bucket=bucket, Key=meta_key, Body=json.dumps(evidence))
+                logger.info(f"Uploaded EKS pod evidence to s3://{bucket}/{meta_key}")
             self.audit.log(
                 AuditAction.COLLECT_POD_LOGS,
                 f"{cluster_name}/{namespace}/{pod_name}",
-                details={"s3_key": key},
+                details={"s3_key": meta_key, "log_s3_key": evidence.get("log_s3_key", "")},
             )
         except Exception as e:
             logger.warning(f"Failed to collect pod logs for {pod_name}: {e}")

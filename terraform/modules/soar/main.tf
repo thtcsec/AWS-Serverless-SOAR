@@ -36,9 +36,9 @@ resource "aws_sqs_queue" "main_queue" {
 }
 
 resource "aws_sqs_queue" "dlq" {
-  name                      = "${var.environment}-soar-events-dlq"
+  name                       = "${var.environment}-soar-events-dlq"
   visibility_timeout_seconds = 300
-  message_retention_seconds = 1209600 # 14 days
+  message_retention_seconds  = 1209600 # 14 days
 
   tags = merge(
     var.tags,
@@ -113,52 +113,52 @@ resource "aws_sfn_state_machine" "incident_response" {
     StartAt = "DetectSeverity"
     States = {
       DetectSeverity = {
-        Type = "Task"
+        Type     = "Task"
         Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.environment}-soar-detect-severity"
-        Next = "IsolateInstance"
+        Next     = "IsolateInstance"
         Retry = [{
-          ErrorEquals = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
           IntervalSeconds = 2
-          MaxAttempts = 2
-          BackoffRate = 2.0
+          MaxAttempts     = 2
+          BackoffRate     = 2.0
         }]
       }
       IsolateInstance = {
-        Type = "Task"
+        Type     = "Task"
         Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.environment}-soar-isolate-instance"
-        Next = "CreateSnapshot"
+        Next     = "CreateSnapshot"
         Retry = [{
-          ErrorEquals = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
           IntervalSeconds = 2
-          MaxAttempts = 2
-          BackoffRate = 2.0
+          MaxAttempts     = 2
+          BackoffRate     = 2.0
         }]
       }
       CreateSnapshot = {
-        Type = "Task"
+        Type     = "Task"
         Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.environment}-soar-create-snapshot"
-        Next = "HumanApproval"
+        Next     = "HumanApproval"
         Retry = [{
-          ErrorEquals = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
           IntervalSeconds = 2
-          MaxAttempts = 2
-          BackoffRate = 2.0
+          MaxAttempts     = 2
+          BackoffRate     = 2.0
         }]
       }
       HumanApproval = {
-        Type = "Wait"
+        Type    = "Wait"
         Seconds = var.approval_wait_time
-        Next = "TerminateInstance"
+        Next    = "TerminateInstance"
       }
       TerminateInstance = {
-        Type = "Task"
+        Type     = "Task"
         Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.environment}-soar-terminate-instance"
-        End = true
+        End      = true
         Retry = [{
-          ErrorEquals = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
+          ErrorEquals     = ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"]
           IntervalSeconds = 2
-          MaxAttempts = 2
-          BackoffRate = 2.0
+          MaxAttempts     = 2
+          BackoffRate     = 2.0
         }]
       }
     }
@@ -197,18 +197,18 @@ resource "aws_ecs_cluster" "soar_workers" {
 
 resource "aws_ecs_task_definition" "isolation_worker" {
   family                   = "${var.environment}-soar-isolation-worker"
-  network_mode            = "awsvpc"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = "256"
-  memory                  = "512"
+  cpu                      = "256"
+  memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
-  task_role_arn           = aws_iam_role.ecs_task_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
     {
       name  = "isolation-worker"
       image = "${var.container_registry}/soar-isolation-worker:latest"
-      
+
       environment = [
         {
           name  = "ENVIRONMENT"
