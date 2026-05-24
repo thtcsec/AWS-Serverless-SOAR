@@ -17,7 +17,7 @@ terraform {
 
 # Main SOAR execution role with cross-account access
 resource "aws_iam_role" "soar_central_role" {
-  name = "${var.environment}-soar-central-execution-role"
+  name        = "${var.environment}-soar-central-execution-role"
   description = "Central SOAR role with cross-account incident response capabilities"
 
   assume_role_policy = jsonencode({
@@ -49,7 +49,7 @@ resource "aws_iam_role" "soar_central_role" {
 
 # Cross-account SOAR responder role
 resource "aws_iam_role" "soar_cross_account_responder" {
-  name = "${var.environment}-soar-cross-account-responder"
+  name        = "${var.environment}-soar-cross-account-responder"
   description = "Role for cross-account incident response operations"
 
   assume_role_policy = jsonencode({
@@ -88,7 +88,7 @@ resource "aws_iam_role" "soar_cross_account_responder" {
 
 # Central SOAR policy
 resource "aws_iam_policy" "soar_central_policy" {
-  name = "${var.environment}-soar-central-policy"
+  name        = "${var.environment}-soar-central-policy"
   description = "Comprehensive SOAR policy for central security account"
 
   policy = jsonencode({
@@ -208,7 +208,7 @@ resource "aws_iam_policy" "soar_central_policy" {
 
 # Cross-account responder policy
 resource "aws_iam_policy" "soar_cross_account_policy" {
-  name = "${var.environment}-soar-cross-account-policy"
+  name        = "${var.environment}-soar-cross-account-policy"
   description = "Policy for cross-account incident response operations"
 
   policy = jsonencode({
@@ -323,7 +323,7 @@ resource "aws_iam_role_policy_attachment" "soar_cross_account_policy_attach" {
 resource "aws_iam_role" "dev_account_access" {
   count = var.enable_dev_account_access ? 1 : 0
   name  = "${var.environment}-soar-dev-account-access"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -356,7 +356,7 @@ resource "aws_iam_role" "dev_account_access" {
 resource "aws_iam_role" "staging_account_access" {
   count = var.enable_staging_account_access ? 1 : 0
   name  = "${var.environment}-soar-staging-account-access"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -389,7 +389,7 @@ resource "aws_iam_role" "staging_account_access" {
 resource "aws_iam_role" "prod_account_access" {
   count = var.enable_prod_account_access ? 1 : 0
   name  = "${var.environment}-soar-prod-account-access"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -425,7 +425,7 @@ resource "aws_iam_role" "prod_account_access" {
 # GuardDuty master account configuration
 resource "aws_guardduty_detector" "central_detector" {
   enable = true
-  
+
   tags = merge(
     var.tags,
     {
@@ -438,35 +438,35 @@ resource "aws_guardduty_detector" "central_detector" {
 
 # GuardDuty member account invitations
 resource "aws_guardduty_member" "dev_member" {
-  count                     = var.enable_dev_account_access ? 1 : 0
-  detector_id              = aws_guardduty_detector.central_detector.id
-  account_id               = var.dev_account_id
-  email                    = var.dev_account_email
-  invite                   = true
+  count                      = var.enable_dev_account_access ? 1 : 0
+  detector_id                = aws_guardduty_detector.central_detector.id
+  account_id                 = var.dev_account_id
+  email                      = var.dev_account_email
+  invite                     = true
   disable_email_notification = false
-  
+
   depends_on = [aws_guardduty_detector.central_detector]
 }
 
 resource "aws_guardduty_member" "staging_member" {
-  count                     = var.enable_staging_account_access ? 1 : 0
-  detector_id              = aws_guardduty_detector.central_detector.id
-  account_id               = var.staging_account_id
-  email                    = var.staging_account_email
-  invite                   = true
+  count                      = var.enable_staging_account_access ? 1 : 0
+  detector_id                = aws_guardduty_detector.central_detector.id
+  account_id                 = var.staging_account_id
+  email                      = var.staging_account_email
+  invite                     = true
   disable_email_notification = false
-  
+
   depends_on = [aws_guardduty_detector.central_detector]
 }
 
 resource "aws_guardduty_member" "prod_member" {
-  count                     = var.enable_prod_account_access ? 1 : 0
-  detector_id              = aws_guardduty_detector.central_detector.id
-  account_id               = var.prod_account_id
-  email                    = var.prod_account_email
-  invite                   = true
+  count                      = var.enable_prod_account_access ? 1 : 0
+  detector_id                = aws_guardduty_detector.central_detector.id
+  account_id                 = var.prod_account_id
+  email                      = var.prod_account_email
+  invite                     = true
   disable_email_notification = false
-  
+
   depends_on = [aws_guardduty_detector.central_detector]
 }
 
@@ -475,7 +475,7 @@ resource "aws_guardduty_member" "prod_member" {
 # ==========================================
 resource "aws_s3_bucket" "central_logs" {
   bucket = "${var.environment}-soar-central-logs-${data.aws_caller_identity.current.account_id}"
-  
+
   tags = merge(
     var.tags,
     {

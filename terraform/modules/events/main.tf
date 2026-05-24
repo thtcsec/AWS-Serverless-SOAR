@@ -43,7 +43,7 @@ resource "aws_cloudwatch_event_rule" "cloudtrail_iam_events" {
   description = "Capture CloudTrail IAM events for SOAR processing"
 
   event_pattern = jsonencode({
-    source = ["aws.iam"]
+    source      = ["aws.iam"]
     detail-type = ["AWS API Call via CloudTrail"]
     detail = {
       eventSource = ["iam.amazonaws.com"]
@@ -73,7 +73,7 @@ resource "aws_cloudwatch_event_rule" "s3_data_events" {
   description = "Capture S3 data events for potential exfiltration detection"
 
   event_pattern = jsonencode({
-    source = ["aws.s3"]
+    source      = ["aws.s3"]
     detail-type = ["Object Created", "Object Accessed"]
     detail = {
       eventSource = ["s3.amazonaws.com"]
@@ -183,17 +183,17 @@ resource "aws_cloudwatch_event_target" "guardduty_to_sqs" {
   rule      = aws_cloudwatch_event_rule.guardduty_findings.name
   target_id = "GuarddutyToSQS"
   arn       = var.main_queue_arn
-  
+
   # Transform the event for SQS processing
   input_transformer {
     input_paths = {
-      source = "$.source"
+      source     = "$.source"
       detailType = "$.detail-type"
-      detail = "$.detail"
-      time = "$.time"
-      id = "$.id"
-      account = "$.account"
-      region = "$.region"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
     }
     input_template = <<EOF
 {
@@ -247,13 +247,13 @@ resource "aws_cloudwatch_event_target" "s3_to_sqs" {
 
   input_transformer {
     input_paths = {
-      source = "$.source"
+      source     = "$.source"
       detailType = "$.detail-type"
-      detail = "$.detail"
-      time = "$.time"
-      id = "$.id"
-      account = "$.account"
-      region = "$.region"
+      detail     = "$.detail"
+      time       = "$.time"
+      id         = "$.id"
+      account    = "$.account"
+      region     = "$.region"
     }
     input_template = <<EOF
 {
@@ -368,7 +368,7 @@ resource "aws_cloudwatch_event_rule" "step_function_trigger" {
   description = "Trigger Step Functions from SQS messages"
 
   event_pattern = jsonencode({
-    source = ["aws.sqs"]
+    source      = ["aws.sqs"]
     detail-type = ["SQS Message"]
   })
 
@@ -483,8 +483,8 @@ resource "aws_lambda_function" "queue_processor" {
   environment {
     variables = {
       STEP_FUNCTION_ARN = var.step_function_arn
-      DLQ_URL          = var.dlq_url
-      LOG_LEVEL        = "INFO"
+      DLQ_URL           = var.dlq_url
+      LOG_LEVEL         = "INFO"
     }
   }
 
@@ -502,11 +502,11 @@ resource "aws_lambda_function" "queue_processor" {
 # SQS Lambda Event Source Mapping
 # ==========================================
 resource "aws_lambda_event_source_mapping" "sqs_to_lambda" {
-  event_source_arn = var.main_queue_arn
-  function_name    = aws_lambda_function.queue_processor.arn
-  batch_size       = 10
+  event_source_arn                   = var.main_queue_arn
+  function_name                      = aws_lambda_function.queue_processor.arn
+  batch_size                         = 10
   maximum_batching_window_in_seconds = 5
-  
+
   depends_on = [aws_lambda_function.queue_processor]
 }
 

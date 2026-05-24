@@ -123,11 +123,11 @@ resource "aws_cloudwatch_dashboard" "soar_dashboard" {
           stacked = false
           metrics = [
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible",
-             "QueueName", var.sqs_queue_name,
-             { stat = "Maximum", period = 60 }],
+              "QueueName", var.sqs_queue_name,
+            { stat = "Maximum", period = 60 }],
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible",
-             "QueueName", var.dlq_queue_name,
-             { stat = "Maximum", period = 60, color = "#d13212" }]
+              "QueueName", var.dlq_queue_name,
+            { stat = "Maximum", period = 60, color = "#d13212" }]
           ]
           region = data.aws_region.current.name
         }
@@ -146,14 +146,14 @@ resource "aws_cloudwatch_dashboard" "soar_dashboard" {
           stacked = true
           metrics = [
             ["AWS/States", "ExecutionsSucceeded",
-             "StateMachineArn", var.step_function_arn,
-             { stat = "Sum", period = 300, color = "#2ca02c" }],
+              "StateMachineArn", var.step_function_arn,
+            { stat = "Sum", period = 300, color = "#2ca02c" }],
             ["AWS/States", "ExecutionsFailed",
-             "StateMachineArn", var.step_function_arn,
-             { stat = "Sum", period = 300, color = "#d13212" }],
+              "StateMachineArn", var.step_function_arn,
+            { stat = "Sum", period = 300, color = "#d13212" }],
             ["AWS/States", "ExecutionsTimedOut",
-             "StateMachineArn", var.step_function_arn,
-             { stat = "Sum", period = 300, color = "#ff7f0e" }]
+              "StateMachineArn", var.step_function_arn,
+            { stat = "Sum", period = 300, color = "#ff7f0e" }]
           ]
           region = data.aws_region.current.name
         }
@@ -167,15 +167,15 @@ resource "aws_cloudwatch_dashboard" "soar_dashboard" {
         width  = 8
         height = 6
         properties = {
-          title   = "Playbook Success Rate (SLI)"
-          view    = "singleValue"
+          title = "Playbook Success Rate (SLI)"
+          view  = "singleValue"
           metrics = [
             ["AWS/Lambda", "Invocations",
-             "FunctionName", var.lambda_function_names[0],
-             { stat = "Sum", period = 86400, label = "Total Invocations" }],
+              "FunctionName", var.lambda_function_names[0],
+            { stat = "Sum", period = 86400, label = "Total Invocations" }],
             ["AWS/Lambda", "Errors",
-             "FunctionName", var.lambda_function_names[0],
-             { stat = "Sum", period = 86400, label = "Total Errors", color = "#d13212" }]
+              "FunctionName", var.lambda_function_names[0],
+            { stat = "Sum", period = 86400, label = "Total Errors", color = "#d13212" }]
           ]
           region = data.aws_region.current.name
         }
@@ -189,8 +189,8 @@ resource "aws_cloudwatch_dashboard" "soar_dashboard" {
         width  = 8
         height = 6
         properties = {
-          title   = "Lambda Throttles"
-          view    = "singleValue"
+          title = "Lambda Throttles"
+          view  = "singleValue"
           metrics = [for fn in var.lambda_function_names : [
             "AWS/Lambda", "Throttles",
             "FunctionName", fn,
