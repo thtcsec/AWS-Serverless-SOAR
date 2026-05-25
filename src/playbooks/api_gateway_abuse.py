@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -125,6 +126,47 @@ class APIGatewayAbusePlaybook(Playbook):
     def _safe_key_component(value: str) -> str:
         return value.replace(":", "_").replace("/", "_")
 
+    @staticmethod
+    def _get_header_value(headers: list[dict[str, Any]] | None, name: str) -> str:
+        if not headers:
+            return ""
+        name_lower = name.lower()
+        for header in headers:
+            header_name = str(header.get("name", "")).lower()
+            if header_name == name_lower:
+                return str(header.get("value", ""))
+        return ""
+
+    @staticmethod
+    def _top_counts(values: list[str], limit: int) -> list[dict[str, Any]]:
+        counter = Counter(v for v in values if v)
+        return [{"value": value, "count": count} for value, count in counter.most_common(limit)]
+
+    def _summarize_waf_samples(self, detail: dict[str, Any]) -> dict[str, Any]:
+        samples = detail.get("sampledRequests", []) or []
+        max_samples = int(os.environ.get("WAF_SAMPLE_MAX", "50"))
+        top_n = int(os.environ.get("WAF_SUMMARY_TOP_N", "5"))
+        used_samples = samples[:max_samples]
+
+        methods: list[str] = []
+        uris: list[str] = []
+        user_agents: list[str] = []
+
+        for sample in used_samples:
+            request = sample.get("request", {}) or sample.get("httpRequest", {}) or {}
+            methods.append(str(request.get("method", "")))
+            uris.append(str(request.get("uri", "")))
+            headers = request.get("headers", [])
+            user_agents.append(self._get_header_value(headers, "user-agent"))
+
+        return {
+            "sample_total": len(samples),
+            "sample_used": len(used_samples),
+            "top_methods": self._top_counts(methods, top_n),
+            "top_uris": self._top_counts(uris, top_n),
+            "top_user_agents": self._top_counts(user_agents, top_n),
+        }
+
     def _collect_evidence(self, client_ip: str, event_data: dict[str, Any]) -> None:
         bucket = self.evidence_bucket or config.evidence_bucket
         if not bucket:
@@ -134,11 +176,13 @@ class APIGatewayAbusePlaybook(Playbook):
             safe_ip = self._safe_key_component(client_ip) or "unknown"
             ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
             key = f"evidence/api_gateway/{safe_ip}/{ts}.json"
+            detail = event_data.get("detail", {}) or {}
             payload = {
                 "client_ip": client_ip,
                 "collected_at": datetime.now(UTC).isoformat(),
                 "source": "aws.waf",
                 "event": event_data,
+                "summary": self._summarize_waf_samples(detail),
             }
             self.s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(payload, default=str))
             self.audit.log(
