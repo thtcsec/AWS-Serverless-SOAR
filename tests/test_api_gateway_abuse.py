@@ -74,4 +74,4 @@ def test_execute_dry_run_preview(waf_abuse_event):
     assert result["mode"] == "dry_run"
     assert result["playbook"] == "APIGatewayAbuse"
     assert result["target_resource"] == "192.168.1.100"
-    assert len(result["planned_actions"]) == 2
+    assert len(result["planned_actions"]) == 3
