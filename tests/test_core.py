@@ -96,10 +96,11 @@ class TestPlaybookRegistry:
         from src.playbooks.registry import PlaybookRegistry
 
         class MockPlaybook:
-            def can_handle(self, event_data):
-                return event_data.get("source") == "test"
+            def can_handle(self, incident):
+                source = incident.raw_event.get("source") if hasattr(incident, "raw_event") else incident.get("source")
+                return source == "test"
 
-            def execute(self, event_data):
+            def execute(self, incident):
                 return True
 
         reg = PlaybookRegistry()
@@ -110,7 +111,7 @@ class TestPlaybookRegistry:
         from src.playbooks.registry import PlaybookRegistry
 
         reg = PlaybookRegistry()
-        assert reg.dispatch({"source": "unknown"}) is False
+        assert reg.dispatch({"source": "unknown"}) is None
 
     def test_dispatch_order(self):
         from src.playbooks.registry import PlaybookRegistry

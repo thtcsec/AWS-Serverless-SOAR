@@ -15,9 +15,11 @@ from typing import Any
 from src.clients.aws import AWSClientFacade
 from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.config import config
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import WAFEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -33,27 +35,29 @@ class APIGatewayAbusePlaybook(Playbook):
         self.ip_set_scope = os.environ.get("WAF_BLOCKLIST_SCOPE", "REGIONAL")
         self.evidence_bucket = os.environ.get("EVIDENCE_BUCKET", "")
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            source = event_data.get("source")
+            source = incident.raw_event.get("source")
             if source != "aws.waf":
                 return False
-            event = WAFEvent.model_validate(event_data)
+            event = WAFEvent.model_validate(incident.raw_event)
             return event.detail.is_ddos_abuse
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("APIGatewayAbuse"):
             try:
-                event = WAFEvent.model_validate(event_data)
+                event = WAFEvent.model_validate(incident.raw_event)
                 client_ip = event.detail.client_ip
 
                 if not client_ip:
                     logger.error("No client IP found in WAF finding")
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(client_ip)
 
                 logger.info(f"Executing API Gateway Abuse Playbook for IP={client_ip}")
@@ -65,7 +69,7 @@ class APIGatewayAbusePlaybook(Playbook):
                 emit_metric("FindingsProcessed", 1.0, "Count", {"Playbook": "APIGatewayAbuse"})
 
                 # Collect abuse evidence if configured
-                self._collect_evidence(client_ip, event_data)
+                self._collect_evidence(client_ip, incident.raw_event)
 
                 # Ensure IP blocklist is configured
                 if not self.ip_set_id or not self.ip_set_name:
@@ -86,12 +90,6 @@ class APIGatewayAbusePlaybook(Playbook):
                 return False
 
         return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, client_ip: str) -> dict[str, Any]:
         target_ip = f"{client_ip}/32" if ":" not in client_ip else f"{client_ip}/128"

@@ -22,9 +22,11 @@ from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import GuardDutyEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 # GuardDuty finding-type keywords that indicate ransomware behaviour
@@ -45,21 +47,23 @@ class RansomwareResponsePlaybook(Playbook):
     def __init__(self) -> None:
         self.audit = AuditLogger()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            if event_data.get("source") != "aws.guardduty":
+            if incident.raw_event.get("source") != "aws.guardduty":
                 return False
-            event = GuardDutyEvent.model_validate(event_data)
+            event = GuardDutyEvent.model_validate(incident.raw_event)
             return any(kw in event.detail.type for kw in _RANSOMWARE_KEYWORDS)
         except (ValidationError, Exception):
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("RansomwareResponse"):
             try:
-                event = GuardDutyEvent.model_validate(event_data)
+                event = GuardDutyEvent.model_validate(incident.raw_event)
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(event)
 
                 logger.info(
@@ -102,12 +106,6 @@ class RansomwareResponsePlaybook(Playbook):
     # ------------------------------------------------------------------ #
     # Dry-run helpers
     # ------------------------------------------------------------------ #
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, event: GuardDutyEvent) -> dict[str, Any]:
         instance_id = self._extract_instance_id(event)

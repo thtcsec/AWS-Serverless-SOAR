@@ -4,37 +4,34 @@ from typing import Any
 from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
+from src.core.policy import RISKY_IAM_ACTIONS
 from src.models.events import IAMCloudTrailEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
 class IAMCompromisePlaybook(Playbook):
     """Playbook to react to IAM compromise events."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.iam = AWSClientFacade.iam()
-        self.risky_actions = [
-            "CreateUser",
-            "CreateAccessKey",
-            "AddUserToGroup",
-            "AttachUserPolicy",
-            "AttachRolePolicy",
-            "CreateRole",
-        ]
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            event = IAMCloudTrailEvent.model_validate(event_data)
-            return event.detail.eventName in self.risky_actions
+            event = IAMCloudTrailEvent.model_validate(incident.raw_event)
+            return event.detail.eventName in RISKY_IAM_ACTIONS
         except ValidationError:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("IAMCompromise"):
             try:
-                event = IAMCloudTrailEvent.model_validate(event_data)
+                event = IAMCloudTrailEvent.model_validate(incident.raw_event)
                 username = str(event.detail.userIdentity.get("userName", ""))
                 source_ip = str(event.detail.sourceIPAddress or "")
                 action = str(event.detail.eventName or "")
@@ -42,47 +39,27 @@ class IAMCompromisePlaybook(Playbook):
                 if not username:
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(username, action, source_ip)
 
-                # 1. Threat Intel & Scoring
-                intel_report = {}
-                risk_data = {"decision": "IGNORE", "risk_score": 0.0}
+                decision = incident.decision
+                score = incident.risk_score
+                intel_report = incident.intel_summary
 
-                if source_ip and not source_ip.endswith(".amazonaws.com"):
-                    from src.integrations.intel import ThreatIntelService
-                    from src.integrations.scoring import ScoringEngine
-
-                    intel_service = ThreatIntelService()
-                    scoring_engine = ScoringEngine()
-
-                    intel_report = intel_service.get_ip_report(source_ip)
-                    # Baseline severity for IAM actions is high (6.0)
-                    risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=6.0)
-
-                decision = str(risk_data.get("decision", "IGNORE"))
-                raw_score = risk_data.get("risk_score", 0.0)
-                score = float(str(raw_score))
-
-                # 2. Decision Routing
                 if decision == "IGNORE":
                     logger.info(f"Ignored IAM Compromise for {username} due to low risk score ({score}).")
                     return True
 
-                elif decision == "REQUIRE_APPROVAL":
+                if decision == "REQUIRE_APPROVAL":
                     logger.info(f"IAM Compromise for {username} requires human approval. Score: {score}")
                     self._notify_slack(username, action, source_ip, score, decision, intel_report)
                     return True
 
-                elif decision == "AUTO_ISOLATE":
+                if decision == "AUTO_ISOLATE":
                     logger.critical(f"IAM Auto-Isolation triggered for {username} on {action} (Score: {score})")
                     emit_metric("FindingsProcessed", 1.0, "Count", {"Playbook": "IAMCompromise"})
-
-                    # Remediation Execution
                     self._disable_access_keys(username)
                     self._revoke_sessions_and_deny_all(username)
-
-                    # Notify
                     self._notify_slack(username, action, source_ip, score, decision, intel_report)
                     return True
 
@@ -91,12 +68,6 @@ class IAMCompromisePlaybook(Playbook):
                 return False
 
             return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(username: str, action: str, source_ip: str) -> dict[str, Any]:

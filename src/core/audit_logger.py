@@ -176,3 +176,14 @@ class AuditLogger:
             )
         except Exception as e:
             logger.warning(f"CloudWatch write failed (non-fatal): {e}")
+
+
+_default_audit_logger: AuditLogger | None = None
+
+
+def get_audit_logger() -> AuditLogger:
+    """Return the process-wide audit logger singleton."""
+    global _default_audit_logger
+    if _default_audit_logger is None:
+        _default_audit_logger = AuditLogger()
+    return _default_audit_logger

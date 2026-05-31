@@ -134,20 +134,21 @@ resource "aws_sns_topic_subscription" "email_sub" {
 # 5. AUTOMATION (Lambda & EventBridge)
 # ==========================================
 
-# ZIP the python source
-data "archive_file" "lambda_zip" {
+# ZIP the unified SOAR source tree (shared by all responder Lambdas)
+data "archive_file" "soar_lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../src/lambda_function.py"
+  source_dir  = "${path.module}/../src"
   output_path = "${path.module}/soar_lambda.zip"
+  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
 }
 
 resource "aws_lambda_function" "soar_responder" {
-  filename                       = data.archive_file.lambda_zip.output_path
+  filename                       = data.archive_file.soar_lambda_zip.output_path
   function_name                  = "soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "lambda_function.lambda_handler"
+  handler                        = "handlers.lambda_handler"
   runtime                        = "python3.12"
-  source_code_hash               = data.archive_file.lambda_zip.output_base64sha256
+  source_code_hash               = data.archive_file.soar_lambda_zip.output_base64sha256
   memory_size                    = var.lambda_memory_size
   timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
@@ -207,15 +208,16 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 
 data "archive_file" "iam_lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../src/iam_compromise_response.py"
+  source_dir  = "${path.module}/../src"
   output_path = "${path.module}/iam_soar_lambda.zip"
+  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
 }
 
 resource "aws_lambda_function" "iam_soar_responder" {
   filename                       = data.archive_file.iam_lambda_zip.output_path
   function_name                  = "iam-soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "iam_compromise_response.lambda_handler"
+  handler                        = "handlers.lambda_handler"
   runtime                        = "python3.12"
   source_code_hash               = data.archive_file.iam_lambda_zip.output_base64sha256
   memory_size                    = var.lambda_memory_size
@@ -266,15 +268,16 @@ resource "aws_lambda_permission" "allow_eventbridge_iam" {
 
 data "archive_file" "s3_lambda_zip" {
   type        = "zip"
-  source_file = "${path.module}/../src/s3_exfiltration_response.py"
+  source_dir  = "${path.module}/../src"
   output_path = "${path.module}/s3_soar_lambda.zip"
+  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
 }
 
 resource "aws_lambda_function" "s3_soar_responder" {
   filename                       = data.archive_file.s3_lambda_zip.output_path
   function_name                  = "s3-soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "s3_exfiltration_response.lambda_handler"
+  handler                        = "handlers.lambda_handler"
   runtime                        = "python3.12"
   source_code_hash               = data.archive_file.s3_lambda_zip.output_base64sha256
   memory_size                    = var.lambda_memory_size

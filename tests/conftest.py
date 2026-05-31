@@ -14,6 +14,25 @@ def aws_credentials():
     os.environ["AWS_SESSION_TOKEN"] = "testing"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
+    from src.clients.aws import AWSClientFacade
+
+    for cached in (
+        AWSClientFacade.ec2,
+        AWSClientFacade.s3,
+        AWSClientFacade.iam,
+        AWSClientFacade.sns,
+        AWSClientFacade.cloudtrail,
+        AWSClientFacade.cloudwatch,
+        AWSClientFacade.securityhub,
+        AWSClientFacade.rds,
+        AWSClientFacade.eks,
+        AWSClientFacade.wafv2,
+        AWSClientFacade.codepipeline,
+        AWSClientFacade.codebuild,
+    ):
+        cached.cache_clear()
+    yield
+
 
 @pytest.fixture
 def mock_aws_env():
@@ -94,3 +113,13 @@ def make_iam_cloudtrail_event(event_name="CreateAccessKey", username="compromise
             "sourceIPAddress": "198.51.100.1",
         },
     }
+
+
+def build_incident(event: dict, decision: str = "AUTO_ISOLATE", risk_score: float = 95.0):
+    """Build a UnifiedIncident with pipeline decision fields set (for playbook unit tests)."""
+    from src.core.event_normalizer import EventNormalizer
+
+    incident = EventNormalizer.ensure(event)
+    incident.decision = decision
+    incident.risk_score = risk_score
+    return incident

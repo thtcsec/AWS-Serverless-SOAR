@@ -1,6 +1,16 @@
+"""
+AWS SOAR Engine — Single Production Entry Point
+
+All security events MUST flow through handle_event().
+Lambda transport adapters may live in entrypoint.py or call handle_event directly.
+"""
+
+from __future__ import annotations
+
+import logging
 from typing import Any
 
-from src.core.logger import logger
+from src.core.pipeline import IncidentPipeline
 from src.playbooks.api_gateway_abuse import APIGatewayAbusePlaybook
 from src.playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
 from src.playbooks.ec2_containment import EC2ContainmentPlaybook
@@ -8,10 +18,12 @@ from src.playbooks.eks_pod_isolation import EKSPodIsolationPlaybook
 from src.playbooks.iam_compromise import IAMCompromisePlaybook
 from src.playbooks.ransomware_response import RansomwareResponsePlaybook
 from src.playbooks.rds_compromise import RDSCompromisePlaybook
-from src.playbooks.registry import registry
+from src.playbooks.registry import PlaybookRegistry
 from src.playbooks.s3_exfiltration import S3ExfiltrationPlaybook
 
-# Register all playbooks on startup
+logger = logging.getLogger("aws-soar.handlers")
+
+registry = PlaybookRegistry()
 registry.register(EC2ContainmentPlaybook())
 registry.register(S3ExfiltrationPlaybook())
 registry.register(IAMCompromisePlaybook())
@@ -21,28 +33,23 @@ registry.register(CICDSupplyChainPlaybook())
 registry.register(APIGatewayAbusePlaybook())
 registry.register(RansomwareResponsePlaybook())
 
+pipeline = IncidentPipeline(registry=registry)
+
+
+def handle_event(event_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Canonical SOAR entry point.
+
+    Pipeline: Event → Normalize → Correlate → Score → Decision → Playbook → Audit
+    """
+    logger.info("Processing event through unified incident pipeline")
+    return pipeline.process(event_data)
+
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Entry point for AWS Lambda to trigger the SOAR Engine."""
-    logger.info("Initializing SOAR Engine processing...")
-
+    """AWS Lambda transport adapter — delegates to handle_event()."""
     try:
-        # Pass the raw event dict to the registry.
-        # The registry will let each Playbook determine if it can `can_handle` the event
-        # and validate the schema using Pydantic implicitly.
-        result = registry.dispatch(event)
-
-        if isinstance(result, dict):
-            logger.info("SOAR Playbook preview generated successfully.")
-            return {"statusCode": 200, "body": result}
-
-        if result:
-            logger.info("SOAR Playbook executed successfully.")
-            return {"statusCode": 200, "body": "Remediation Successful"}
-
-        logger.info("Event ignored or no applicable playbook found.")
-        return {"statusCode": 200, "body": "Event Ignored"}
-
-    except Exception as e:
-        logger.error(f"Critical Engine Failure: {str(e)}")
+        return handle_event(event)
+    except Exception as exc:
+        logger.error(f"Critical Engine Failure: {exc}")
         return {"statusCode": 500, "body": "Internal Server Error"}

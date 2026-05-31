@@ -6,9 +6,11 @@ from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
 from src.core.config import config
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import GuardDutyEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -21,25 +23,25 @@ class EC2ContainmentPlaybook(Playbook):
         self.iam = AWSClientFacade.iam()
         self.isolation_sg_id = os.environ.get("ISOLATION_SG_ID")
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            # Quick check if it's a GuardDuty EC2 finding
-            source = event_data.get("source")
+            source = incident.raw_event.get("source")
             if source != "aws.guardduty":
                 return False
 
-            # Full validation
-            event = GuardDutyEvent.model_validate(event_data)
+            event = GuardDutyEvent.model_validate(incident.raw_event)
             return "EC2" in event.detail.type or event.detail.service.get("resourceRole") == "TARGET"
         except ValidationError:
             return False
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("EC2Containment"):
             try:
-                event = GuardDutyEvent.model_validate(event_data)
+                event = GuardDutyEvent.model_validate(incident.raw_event)
                 instance_id = None
                 if event.detail.resource:
                     instance_id = event.detail.resource.get("instanceDetails", {}).get("instanceId")
@@ -50,7 +52,7 @@ class EC2ContainmentPlaybook(Playbook):
                     logger.error("No instance ID found in GuardDuty finding")
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(instance_id, event.detail.id)
 
                 logger.info(f"Executing EC2 Containment for {instance_id}")
@@ -105,12 +107,6 @@ class EC2ContainmentPlaybook(Playbook):
             except Exception as e:
                 logger.error(f"EC2 Containment failed: {str(e)}", exc_info=True)
                 return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, instance_id: str, finding_id: str) -> dict[str, Any]:
         planned_actions = [

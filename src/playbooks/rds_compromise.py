@@ -13,9 +13,11 @@ from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import RDSCloudTrailEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -28,22 +30,24 @@ class RDSCompromisePlaybook(Playbook):
         self.isolation_sg_id = os.environ.get("ISOLATION_SG_ID")
         self.audit = AuditLogger()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            source = event_data.get("source")
+            source = incident.raw_event.get("source")
             if source != "aws.rds":
                 return False
-            event = RDSCloudTrailEvent.model_validate(event_data)
+            event = RDSCloudTrailEvent.model_validate(incident.raw_event)
             return event.detail.is_risky
         except ValidationError:
             return False
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("RDSCompromise"):
             try:
-                event = RDSCloudTrailEvent.model_validate(event_data)
+                event = RDSCloudTrailEvent.model_validate(incident.raw_event)
                 db_id = event.detail.dbInstanceIdentifier
                 source_ip = str(event.detail.sourceIPAddress or "")
                 event_name = event.detail.eventName
@@ -52,7 +56,7 @@ class RDSCompromisePlaybook(Playbook):
                     logger.error("No dbInstanceIdentifier found in RDS CloudTrail event")
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(db_id, event_name, source_ip)
 
                 logger.info(f"Executing RDS Compromise playbook for {db_id} (action={event_name})")
@@ -119,7 +123,7 @@ class RDSCompromisePlaybook(Playbook):
             except Exception as e:
                 logger.error(f"RDS Compromise playbook failed: {e}", exc_info=True)
                 with contextlib.suppress(Exception):
-                    db_id_fallback = event_data.get("detail", {}).get("dbInstanceIdentifier", "unknown")
+                    db_id_fallback = incident.raw_event.get("detail", {}).get("dbInstanceIdentifier", "unknown")
                     self.audit.log(AuditAction.PLAYBOOK_FAILED, db_id_fallback, success=False)
                 return False
 
@@ -188,12 +192,6 @@ class RDSCompromisePlaybook(Playbook):
             notifier.send_incident_alert(incident_data)
         except Exception as e:
             logger.warning(f"Failed to send Slack notification: {e}")
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, db_id: str, event_name: str, source_ip: str) -> dict[str, Any]:
         return {

@@ -23,7 +23,7 @@ logger = logging.getLogger("aws-soar.normalizer")
 
 
 class UnifiedIncident(BaseModel):
-    """Platform-agnostic incident representation."""
+    """Platform-agnostic incident representation — canonical schema for the SOAR pipeline."""
 
     incident_id: str = ""
     platform: str = "aws"
@@ -41,6 +41,15 @@ class UnifiedIncident(BaseModel):
     raw_event_type: str = ""
     correlation_keys: list[str] = Field(default_factory=list)
     trace_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    raw_event: dict[str, Any] = Field(default_factory=dict)
+    related_incidents: list[str] = Field(default_factory=list)
+    pipeline_options: dict[str, Any] = Field(default_factory=dict)
+
+    def to_playbook_payload(self) -> dict[str, Any]:
+        payload = dict(self.raw_event)
+        payload.update(self.pipeline_options)
+        payload["_incident"] = self.model_dump(exclude={"raw_event"})
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +149,7 @@ class EventNormalizer:
         """Normalize an S3 CloudTrail event into a UnifiedIncident."""
         detail = event_data.get("detail", {})
         user_identity = detail.get("userIdentity", {})
-        request_params = detail.get("requestParameters", {})
+        request_params = detail.get("requestParameters") or {}
 
         actor = user_identity.get("userName", user_identity.get("arn", "unknown"))
         source_ip = detail.get("sourceIPAddress", "")
@@ -167,6 +176,74 @@ class EventNormalizer:
         )
 
     @classmethod
+    def from_cloudtrail_rds(cls, event_data: dict[str, Any]) -> UnifiedIncident:
+        """Normalize an RDS CloudTrail event into a UnifiedIncident."""
+        detail = event_data.get("detail", {})
+        user_identity = detail.get("userIdentity", {})
+        request_params = detail.get("requestParameters") or {}
+
+        actor = user_identity.get("userName", user_identity.get("arn", "unknown"))
+        source_ip = detail.get("sourceIPAddress", "")
+        action = detail.get("eventName", "")
+        db_id = request_params.get("dBInstanceIdentifier", request_params.get("dbInstanceIdentifier", ""))
+        ts = datetime.now(UTC).isoformat()
+
+        incident_id = cls._generate_id("rds", db_id or actor, ts)
+        correlation_keys = [k for k in [source_ip, actor, db_id] if k]
+
+        return UnifiedIncident(
+            incident_id=incident_id,
+            platform="aws",
+            timestamp=ts,
+            severity="HIGH",
+            source_ip=source_ip,
+            actor=actor,
+            action=action,
+            resource=db_id,
+            resource_type="rds_instance",
+            tags=["cloudtrail", "rds", action],
+            raw_event_type="RDSCloudTrailEvent",
+            correlation_keys=correlation_keys,
+        )
+
+    @classmethod
+    def from_cicd(cls, event_data: dict[str, Any]) -> UnifiedIncident:
+        """Normalize a CodePipeline / CodeBuild CloudTrail event."""
+        detail = event_data.get("detail", {})
+        user_identity = detail.get("userIdentity", {})
+        request_params = detail.get("requestParameters") or {}
+        source = event_data.get("source", "")
+
+        actor = user_identity.get("userName", user_identity.get("arn", "unknown"))
+        source_ip = detail.get("sourceIPAddress", "")
+        action = detail.get("eventName", "")
+        resource = (
+            request_params.get("name", "")
+            or request_params.get("pipeline", {}).get("name", "")
+            or request_params.get("id", "")
+            or actor
+        )
+        ts = datetime.now(UTC).isoformat()
+
+        incident_id = cls._generate_id("cicd", resource, ts)
+        correlation_keys = [k for k in [source_ip, actor, resource] if k]
+
+        return UnifiedIncident(
+            incident_id=incident_id,
+            platform="aws",
+            timestamp=ts,
+            severity="HIGH",
+            source_ip=source_ip,
+            actor=actor,
+            action=action,
+            resource=resource,
+            resource_type="cicd_pipeline" if source == "aws.codepipeline" else "codebuild",
+            tags=["cloudtrail", source.replace("aws.", ""), action],
+            raw_event_type="CICDCloudTrailEvent",
+            correlation_keys=correlation_keys,
+        )
+
+    @classmethod
     def normalize(cls, event_data: dict[str, Any]) -> UnifiedIncident | None:
         """Auto-detect event type and normalize accordingly."""
         source = event_data.get("source", "")
@@ -178,6 +255,55 @@ class EventNormalizer:
             return cls.from_cloudtrail_iam(event_data)
         elif source == "aws.s3":
             return cls.from_cloudtrail_s3(event_data)
+        elif source == "aws.rds":
+            return cls.from_cloudtrail_rds(event_data)
+        elif source in ("aws.codepipeline", "aws.codebuild"):
+            return cls.from_cicd(event_data)
+
+        if source == "aws.waf":
+            return cls.from_waf(event_data)
 
         logger.warning(f"Unknown event source: {source}")
         return None
+
+    @classmethod
+    def from_waf(cls, event_data: dict[str, Any]) -> UnifiedIncident:
+        """Normalize a WAF / API Gateway abuse event."""
+        detail = event_data.get("detail", {})
+        source_ip = detail.get("sourceIPAddress", detail.get("clientIp", ""))
+        ts = event_data.get("time", datetime.now(UTC).isoformat())
+        incident_id = cls._generate_id("waf", source_ip or "unknown", ts)
+
+        return UnifiedIncident(
+            incident_id=incident_id,
+            platform="aws",
+            timestamp=ts,
+            severity="HIGH",
+            source_ip=source_ip,
+            actor="unknown",
+            action=detail.get("eventName", "WAFBlock"),
+            resource=source_ip or "unknown",
+            resource_type="waf_client",
+            tags=["waf", "api_gateway"],
+            raw_event_type="WAFEvent",
+            correlation_keys=[k for k in [source_ip] if k],
+        )
+
+    @classmethod
+    def ensure(cls, event_data: dict[str, Any] | UnifiedIncident) -> UnifiedIncident:
+        """Coerce raw transport payloads into UnifiedIncident objects."""
+        if isinstance(event_data, UnifiedIncident):
+            if not event_data.raw_event:
+                event_data.raw_event = {}
+            return event_data
+
+        incident = cls.normalize(event_data)
+        if incident is None:
+            incident = UnifiedIncident(raw_event_type="unknown")
+        incident.raw_event = event_data
+        incident.pipeline_options = {
+            key: event_data[key]
+            for key in ("dry_run", "preview_only", "execution_mode")
+            if key in event_data
+        }
+        return incident

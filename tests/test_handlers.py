@@ -1,52 +1,58 @@
-"""Tests for Lambda handler and event routing."""
+"""Tests for Lambda handler and unified incident pipeline."""
 
 from unittest.mock import patch
 
+from src.handlers import handle_event, lambda_handler
 from tests.conftest import make_guardduty_event
 
 
-class TestLambdaHandler:
-    @patch("src.handlers.registry")
-    def test_successful_dispatch(self, mock_registry):
-        from src.handlers import lambda_handler
+class TestHandleEvent:
+    @patch("src.handlers.pipeline")
+    def test_successful_dispatch(self, mock_pipeline):
+        mock_pipeline.process.return_value = {"statusCode": 200, "body": {"status": "executed"}}
 
-        mock_registry.dispatch.return_value = True
-
-        result = lambda_handler(make_guardduty_event(), None)
+        event = make_guardduty_event()
+        result = handle_event(event)
         assert result["statusCode"] == 200
-        assert result["body"] == "Remediation Successful"
-        mock_registry.dispatch.assert_called_once()
+        assert result["body"]["status"] == "executed"
+        mock_pipeline.process.assert_called_once_with(event)
 
-    @patch("src.handlers.registry")
-    def test_no_matching_playbook(self, mock_registry):
-        from src.handlers import lambda_handler
+    @patch("src.handlers.pipeline")
+    def test_no_matching_playbook(self, mock_pipeline):
+        mock_pipeline.process.return_value = {"statusCode": 200, "body": {"status": "no_playbook"}}
 
-        mock_registry.dispatch.return_value = False
-
-        result = lambda_handler({"source": "unknown"}, None)
+        result = handle_event({"source": "unknown"})
         assert result["statusCode"] == 200
-        assert result["body"] == "Event Ignored"
+        assert result["body"]["status"] == "no_playbook"
 
-    @patch("src.handlers.registry")
-    def test_dry_run_preview_response(self, mock_registry):
-        from src.handlers import lambda_handler
-
-        mock_registry.dispatch.return_value = {
-            "mode": "dry_run",
-            "playbook": "EC2Containment",
-            "planned_actions": [],
+    @patch("src.handlers.pipeline")
+    def test_dry_run_preview_response(self, mock_pipeline):
+        mock_pipeline.process.return_value = {
+            "statusCode": 200,
+            "body": {
+                "mode": "dry_run",
+                "playbook": "EC2Containment",
+                "planned_actions": [],
+            },
         }
 
-        result = lambda_handler({"dry_run": True}, None)
+        result = handle_event({"dry_run": True})
         assert result["statusCode"] == 200
         assert result["body"]["mode"] == "dry_run"
         assert result["body"]["playbook"] == "EC2Containment"
 
-    @patch("src.handlers.registry")
-    def test_critical_failure(self, mock_registry):
-        from src.handlers import lambda_handler
+    @patch("src.handlers.pipeline")
+    def test_lambda_handler_delegates_to_pipeline(self, mock_pipeline):
+        mock_pipeline.process.return_value = {"statusCode": 200, "body": {"status": "executed"}}
 
-        mock_registry.dispatch.side_effect = Exception("Boom")
+        event = make_guardduty_event()
+        result = lambda_handler(event, None)
+        assert result["statusCode"] == 200
+        mock_pipeline.process.assert_called_once_with(event)
+
+    @patch("src.handlers.pipeline")
+    def test_critical_failure(self, mock_pipeline):
+        mock_pipeline.process.side_effect = Exception("Boom")
 
         result = lambda_handler(make_guardduty_event(), None)
         assert result["statusCode"] == 500
@@ -57,7 +63,9 @@ class TestImports:
     def test_import_handlers(self):
         import src.handlers
 
+        assert hasattr(src.handlers, "handle_event")
         assert hasattr(src.handlers, "lambda_handler")
+        assert hasattr(src.handlers, "pipeline")
 
     def test_import_models(self):
         from src.models.events import GuardDutyEvent

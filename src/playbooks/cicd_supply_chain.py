@@ -12,9 +12,11 @@ from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import CodePipelineEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -29,20 +31,22 @@ class CICDSupplyChainPlaybook(Playbook):
         self.s3 = AWSClientFacade.s3()
         self.audit = AuditLogger()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            source = event_data.get("source", "")
+            source = incident.raw_event.get("source", "")
             if source not in self.VALID_SOURCES:
                 return False
-            event = CodePipelineEvent.model_validate(event_data)
+            event = CodePipelineEvent.model_validate(incident.raw_event)
             return event.detail.is_supply_chain_risk
         except (ValidationError, Exception):
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("CICDSupplyChain"):
             try:
-                event = CodePipelineEvent.model_validate(event_data)
+                event = CodePipelineEvent.model_validate(incident.raw_event)
                 source = event.source
                 event_name = event.detail.eventName
                 source_ip = str(event.detail.sourceIPAddress or "")
@@ -55,7 +59,7 @@ class CICDSupplyChainPlaybook(Playbook):
                 build_id = params.get("id", "")
                 resource_id = pipeline_name or build_id or "unknown"
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(
                         source, resource_id, event_name, source_ip, actor, pipeline_name, build_id
                     )
@@ -114,12 +118,6 @@ class CICDSupplyChainPlaybook(Playbook):
                 return False
 
         return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(

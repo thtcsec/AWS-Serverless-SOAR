@@ -3,9 +3,11 @@ from typing import Any
 from pydantic import ValidationError
 
 from src.clients.aws import AWSClientFacade
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import S3CloudTrailEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -15,17 +17,19 @@ class S3ExfiltrationPlaybook(Playbook):
     def __init__(self):
         self.s3 = AWSClientFacade.s3()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            event = S3CloudTrailEvent.model_validate(event_data)
+            event = S3CloudTrailEvent.model_validate(incident.raw_event)
             return event.detail.eventName in ["GetObject", "ListObjects", "DownloadFile"]
         except ValidationError:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("S3Exfiltration"):
             try:
-                event = S3CloudTrailEvent.model_validate(event_data)
+                event = S3CloudTrailEvent.model_validate(incident.raw_event)
 
                 # Extract basic data
                 bucket_name = (
@@ -37,7 +41,7 @@ class S3ExfiltrationPlaybook(Playbook):
                 if not bucket_name or not user_arn:
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(bucket_name, user_arn, event_name)
 
                 logger.warning(f"S3 Exfiltration detected on bucket {bucket_name} by user {user_arn}")
@@ -97,12 +101,6 @@ class S3ExfiltrationPlaybook(Playbook):
                 logger.warning(f"Could not enable object lock: {str(e)}")
         except Exception as e:
             logger.error(f"Failed to enable S3 protection: {str(e)}")
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(bucket_name: str, user_arn: str, event_name: str) -> dict[str, Any]:

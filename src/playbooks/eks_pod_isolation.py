@@ -11,9 +11,11 @@ from typing import Any
 
 from src.clients.aws import AWSClientFacade
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import EKSGuardDutyEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -26,20 +28,22 @@ class EKSPodIsolationPlaybook(Playbook):
         self.audit = AuditLogger()
         self.evidence_bucket = os.environ.get("EVIDENCE_BUCKET", "")
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            source = event_data.get("source")
+            source = incident.raw_event.get("source")
             if source != "aws.guardduty":
                 return False
-            event = EKSGuardDutyEvent.model_validate(event_data)
+            event = EKSGuardDutyEvent.model_validate(incident.raw_event)
             return event.is_eks_runtime_threat
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("EKSPodIsolation"):
             try:
-                event = EKSGuardDutyEvent.model_validate(event_data)
+                event = EKSGuardDutyEvent.model_validate(incident.raw_event)
                 finding_type = event.detail.type
                 severity = event.detail.severity
 
@@ -56,7 +60,7 @@ class EKSPodIsolationPlaybook(Playbook):
                     logger.error("No EKS cluster name found in GuardDuty finding")
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(cluster_name, namespace, pod_name, finding_type, severity)
 
                 logger.info(f"Executing EKS Pod Isolation for cluster={cluster_name}, pod={pod_name}")
@@ -106,12 +110,6 @@ class EKSPodIsolationPlaybook(Playbook):
         elif severity >= 4.0:
             return "REQUIRE_APPROVAL"
         return "IGNORE"
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(
