@@ -302,8 +302,6 @@ class EventNormalizer:
             incident = UnifiedIncident(raw_event_type="unknown")
         incident.raw_event = event_data
         incident.pipeline_options = {
-            key: event_data[key]
-            for key in ("dry_run", "preview_only", "execution_mode")
-            if key in event_data
+            key: event_data[key] for key in ("dry_run", "preview_only", "execution_mode") if key in event_data
         }
         return incident

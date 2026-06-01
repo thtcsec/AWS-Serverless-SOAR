@@ -13,6 +13,4 @@ def coerce_incident(incident: UnifiedIncident | dict[str, Any]) -> UnifiedIncide
 
 def is_dry_run(incident: UnifiedIncident) -> bool:
     opts = incident.pipeline_options
-    return bool(
-        opts.get("dry_run") or opts.get("preview_only") or opts.get("execution_mode") == "dry_run"
-    )
+    return bool(opts.get("dry_run") or opts.get("preview_only") or opts.get("execution_mode") == "dry_run")

@@ -59,9 +59,7 @@ class IncidentPipeline:
 
         incident.raw_event = event_data
         incident.pipeline_options = {
-            k: event_data[k]
-            for k in ("dry_run", "preview_only", "execution_mode")
-            if k in event_data
+            k: event_data[k] for k in ("dry_run", "preview_only", "execution_mode") if k in event_data
         }
 
         self._correlator.ingest(incident)
