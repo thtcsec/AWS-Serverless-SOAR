@@ -39,9 +39,11 @@ class TestIncidentPipeline:
                 "breakdown": {},
             }
 
-        with patch.object(PolicyEngine, "evaluate", side_effect=_auto_isolate):
-            with patch.object(registry, "dispatch", return_value=True) as mock_dispatch:
-                result = pipeline.process(event)
+        with (
+            patch.object(PolicyEngine, "evaluate", side_effect=_auto_isolate),
+            patch.object(registry, "dispatch", return_value=True) as mock_dispatch,
+        ):
+            result = pipeline.process(event)
 
         assert result["statusCode"] == 200
         mock_dispatch.assert_called_once()
@@ -69,18 +71,20 @@ class TestIncidentPipeline:
         pipeline = IncidentPipeline(registry=registry, policy=PolicyEngine())
         event = make_iam_cloudtrail_event()
 
-        with patch.object(registry, "dispatch") as mock_dispatch:
-            with patch.object(PolicyEngine, "evaluate") as mock_evaluate:
-                mock_evaluate.side_effect = lambda incident: (
-                    setattr(incident, "decision", "REQUIRE_APPROVAL")
-                    or setattr(incident, "risk_score", 55.0)
-                    or {
-                        "decision": "REQUIRE_APPROVAL",
-                        "risk_score": 55.0,
-                        "summary": "approval needed",
-                    }
-                )
-                result = pipeline.process(event)
+        def _require_approval(incident):
+            incident.decision = "REQUIRE_APPROVAL"
+            incident.risk_score = 55.0
+            return {
+                "decision": "REQUIRE_APPROVAL",
+                "risk_score": 55.0,
+                "summary": "approval needed",
+            }
+
+        with (
+            patch.object(registry, "dispatch") as mock_dispatch,
+            patch.object(PolicyEngine, "evaluate", side_effect=_require_approval),
+        ):
+            result = pipeline.process(event)
 
         assert result["statusCode"] == 200
         assert result["body"]["status"] == "pending_approval"

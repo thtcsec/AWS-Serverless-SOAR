@@ -9,9 +9,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from src.core.event_normalizer import UnifiedIncident
 from src.integrations.intel import ThreatIntelService
 from src.integrations.scoring import ScoringEngine
-from src.core.event_normalizer import UnifiedIncident
 
 logger = logging.getLogger("aws-soar.policy")
 
