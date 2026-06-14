@@ -11,11 +11,12 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
     *   **Phát hiện bất thường ML (Isolation Forest):** Phân tích hành vi sử dụng feature vector (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) với fallback Z-Score.
     *   **Scoring Engine (0-100):** Tính toán động `risk_score` kết hợp độ tin cậy tình báo, mức độ nghiêm trọng, và anomaly boost (+15). Đầu ra: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
 *   **Nền tảng SOAR:**
-    *   **Định tuyến sự kiện:** EventBridge → SQS (Buffer Queue + DLQ) để đảm bảo giao nhận.
-    *   **Điều phối luồng:** Step Functions (State Machine) → Lambda (Isolation Worker) + Fargate/ECS (Forensic Worker).
-    *   **Phê duyệt con người:** Tích hợp Slack/Jira cho quyết định human-in-the-loop.
-    *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident` để tương thích đa nền tảng.
-    *   **Tương quan sự cố:** Nhóm các cảnh báo liên quan theo IOC chung (IP, tác nhân, cửa sổ ±5 phút) để phát hiện chiến dịch tấn công đa giai đoạn.
+    *   **Định tuyến sự kiện:** EventBridge → SQS (buffer tùy chọn + DLQ).
+    *   **Pipeline thống nhất:** Lambda (`handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`).
+    *   **Phê duyệt con người:** Slack/Jira khi `PolicyEngine` trả về `REQUIRE_APPROVAL`.
+    *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident`.
+    *   **Tương quan sự cố:** Nhóm cảnh báo theo IOC chung (IP, tác nhân, ±5 phút).
+    *   **Legacy:** Step Functions trong Terraform (nếu có) chỉ là wiring — không chứa logic playbook.
 *   **Hệ thống phân cấp cách ly (Function > Process > Container > Permissions > Network):**
     *   **Tầng Process:** Kill các tiến trình độc hại và cách ly file qua SSM Run Command.
     *   **Tầng Container:** Trục xuất EKS pod nhiễm mã độc và gắn label cách ly mạng.
@@ -39,7 +40,7 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
 
 ## 3. Quan sát & Gia cố Bảo mật
 
-*   **CloudWatch Dashboard (Terraform):** Lượng sự cố, tỷ lệ lỗi, MTTR, độ sâu SQS, trạng thái Step Functions, SLO/SLI.
+*   **CloudWatch Dashboard (Terraform):** Lượng sự cố, tỷ lệ lỗi, MTTR, độ sâu SQS, lỗi Lambda, SLO/SLI.
 *   **CloudWatch Alarms:** Tự động cảnh báo khi Lambda lỗi hoặc DLQ tồn đọng.
 *   **Xoay vòng bí mật:** Chính sách xoay 90 ngày cho tất cả API key qua SSM Parameter Store.
 *   **Audit Logger:** Nhật ký kiểm toán có cấu trúc cho mọi hành động SOAR với CloudWatch + S3 lưu trữ.

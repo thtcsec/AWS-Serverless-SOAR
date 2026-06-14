@@ -11,11 +11,12 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
     *   **ML Anomaly Detection (Isolation Forest):** Behavioral analysis using feature vectors (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) with Z-Score fallback.
     *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15). Outputs: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
 *   **SOAR Platform:**
-    *   **Event Routing:** EventBridge → SQS (Buffer Queue + DLQ) for resilient event delivery.
-    *   **Workflow Orchestration:** Step Functions (State Machine) → Lambda (Isolation Worker) + Fargate/ECS (Forensic Worker).
-    *   **Human Approval:** Slack/Jira integration for human-in-the-loop decisions.
+    *   **Event Routing:** EventBridge → SQS (optional buffer + DLQ) for resilient event delivery.
+    *   **Unified Pipeline:** AWS Lambda (`handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
+    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
+    *   **Legacy:** Step Functions Terraform modules (if present) are transport/wiring only — not the business spine.
 *   **Containment Hierarchy (Function > Process > Container > Permission > Network):**
     *   **Process-Level:** Kill malicious processes and quarantine files via SSM Run Command.
     *   **Container-Level:** Evict compromised EKS pods and apply quarantine network labels.
@@ -39,7 +40,7 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
 
 ## 3. Observability & Security Hardening
 
-*   **CloudWatch Dashboard (Terraform):** Incident volume, error rate, MTTR, SQS depth, Step Functions status, SLO/SLI metrics.
+*   **CloudWatch Dashboard (Terraform):** Incident volume, error rate, MTTR, SQS depth, Lambda errors, SLO/SLI metrics.
 *   **CloudWatch Alarms:** Auto-alert on Lambda errors and DLQ backlogs.
 *   **Secret Rotation:** 90-day rotation policy for all API keys via SSM Parameter Store.
 *   **Audit Logger:** Structured audit trail for every SOAR action with CloudWatch + S3 archival.

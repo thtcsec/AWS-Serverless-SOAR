@@ -16,12 +16,27 @@ Automated security incident response platform that detects threats and automatic
 
 ## Architecture Overview
 
-### System Architecture
+### Single Incident Pipeline (Production)
+
+```mermaid
+flowchart LR
+    A[Event Sources] --> B[EventBridge / SQS]
+    B --> C[handlers.lambda_handler]
+    C --> D[IncidentPipeline]
+    D --> E[EventNormalizer]
+    E --> F[IncidentCorrelator]
+    F --> G[PolicyEngine]
+    G --> H{Decision}
+    H -->|IGNORE| I[AuditLogger]
+    H -->|REQUIRE_APPROVAL| J[Slack + Audit]
+    H -->|AUTO_ISOLATE / EVALUATE| K[PlaybookRegistry]
+    K --> L[Playbooks]
+    L --> I
 ```
-Threat Detection → Event Router → Message Queue → Workflow Engine → Workers
-     ↓                    ↓              ↓              ↓           ↓
-GuardDuty/SCC → EventBridge/Eventarc → SQS/PubSub → Step Functions/Cloud Workflows → Container Workers
-```
+
+**Entry point:** `src/handlers.py` → `handle_event()` (Terraform handler: `handlers.lambda_handler`)
+
+**Deprecated:** `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py` — re-export only. Step Functions Terraform modules (if present) are **legacy wiring**, not the business spine.
 
 ### Logical Data Flow
 ```mermaid
@@ -29,56 +44,56 @@ sequenceDiagram
     participant Attacker
     participant EC2 as AWS EC2
     participant GD as GuardDuty
-    participant SQS as AWS SQS
-    participant SFN as Step Functions
-    participant ECS as Fargate Workers
+    participant EB as EventBridge
+    participant L as Lambda (handlers)
+    participant P as IncidentPipeline
+    participant PE as PolicyEngine
+    participant PB as EC2ContainmentPlaybook
+    participant A as AuditLogger
     participant Sec as Security Team
 
-    Attacker->>EC2: Exploits RCE vulnerability
-    Attacker->>EC2: Downloads Crypto Miner
-    EC2->>Internet: Makes unauthorized DNS queries (Mining Pool)
-    
+    Attacker->>EC2: Exploits RCE / installs miner
+    EC2->>Internet: Suspicious DNS (mining pool)
+
     rect rgb(255, 200, 200)
-        Note over GD,EC2: Detection Phase
-        GD->>EC2: Analyzes VPC Flow Logs & DNS
-        GD-->>SQS: Generates High Severity Finding (Score: 8.5)
+        Note over GD,EB: Detection
+        GD->>EB: GuardDuty Finding (EventBridge)
     end
-    
+
     rect rgb(200, 220, 255)
-        Note over SQS,SFN: Orchestration Phase
-        SQS-->>SFN: Triggers Incident Response State Machine
-        SFN->>SFN: Validates Finding & Extracts Instance ID
+        Note over EB,P: Unified pipeline
+        EB->>L: invoke (handlers.lambda_handler)
+        L->>P: handle_event() → process()
+        P->>P: normalize + correlate
+        P->>PE: evaluate()
+        PE-->>P: AUTO_ISOLATE (score ≥ 70)
+        P->>PB: PlaybookRegistry.dispatch()
     end
-    
+
     rect rgb(255, 230, 200)
-        Note over SFN,ECS: Automated Response Phase
-        SFN->>EC2: Modifies Security Group (Isolate)
-        SFN->>EC2: Enforces IMDSv2
-        SFN->>IAM: Detaches Instance Profile Roles
-        SFN->>IAM: Attaches Deny-All Session Policy
-        SFN->>EC2: Triggers EBS Volume Snapshot
-        SFN->>EC2: Executes stop_instances()
+        Note over PB,EC2: Playbook actions (or dry_run preview)
+        PB->>EC2: isolate SG, IMDSv2, snapshot, stop
     end
-    
+
     rect rgb(200, 255, 200)
-        Note over SFN,Sec: Forensic & Notification Phase
-        SFN->>ECS: Dispatches Forensics Worker Task
-        ECS->>ECS: Mounts Snapshot & Scans for Malware
-        ECS-->>SFN: Returns Forensic Report
-        SFN->>Sec: Sends Slack/Jira Alert with Report
+        Note over P,Sec: Audit & notify
+        P->>A: lifecycle audit
+        P->>Sec: Slack/Jira on REQUIRE_APPROVAL
     end
 ```
 
 ### Workflow Process
-1. **Detection:** GuardDuty detects threats (severity >= 7.0)
-2. **Event Routing:** EventBridge routes to SQS queue
-3. **Workflow Engine:** Step Functions orchestrates response
-4. **Container Workers:** ECS Fargate performs long-running operations
-5. **Human Approval:** Manual approval for critical actions
-6. **Integrations:** Slack, Jira, SIEM notifications
+1. **Detection:** GuardDuty, CloudTrail, Security Hub, VPC Flow Logs, Inspector, Macie
+2. **Transport:** EventBridge → optional SQS buffer (+ DLQ)
+3. **Pipeline:** `IncidentPipeline` — normalize → correlate → score → decision → dispatch
+4. **Playbooks:** containment logic lives only under `src/playbooks/`
+5. **Policy gate:** `IGNORE` (<40) | `REQUIRE_APPROVAL` (40–69) | `AUTO_ISOLATE` (≥70) | `EVALUATE` (domain-specific, e.g. S3 exfil)
+6. **Audit:** `AuditLogger` records every phase
 
 ### 🖼️ High-Level Architecture
 ![Architecture Diagram](images/aws_soar.png)
+
+Legacy Step Functions–centric diagram: `images/aws_soar_deprecated_stepfunctions.png`
 
 ## 🕵️ Threat Scenario
 
@@ -86,55 +101,31 @@ sequenceDiagram
 
 **Detection:** The malware begins making outbound DNS requests to known mining pools (e.g., `pool.minexmr.com`). GuardDuty analyzes the DNS logs and flags the instance with a *High-Severity* finding (`CryptoCurrency:EC2/BitcoinTool.B`).
 
-**Response Flow:**
-1. Within seconds, the SOAR workflow executes.
-2. The instance is yanked off the network.
-3. Its metadata endpoint is locked down. 
-4. All active AWS privileges are explicitly revoked.
-5. Its hard drive is snapshotted for the Blue Team.
-6. The server shutting down.
+**Response Flow (playbook steps — use `dry_run=True` locally without cloud APIs):**
+1. Event reaches `handlers.handle_event()` via EventBridge (optional SQS buffer).
+2. `PolicyEngine` scores the incident; high risk → `EC2ContainmentPlaybook`.
+3. Playbook may: swap security group, enforce IMDSv2, detach instance profile, snapshot EBS, stop instance.
+4. `AuditLogger` records normalize → correlate → score → decision → playbook phases.
 
-### Timeline/Response Flow
+### Response phases (logical order — not measured cloud latency)
 ```mermaid
-gantt
-    title SOAR Incident Response Timeline
-    dateFormat  s
-    axisFormat  %S
-    
-    section Detection
-    GuardDuty Analyzes Logs     :a1, 0, 10s
-    EventBridge Routes Finding  :a2, after a1, 2s
-    
-    section Automated Response
-    SQS Buffers Message         :a3, after a2, 1s
-    SFN Validates Event         :a4, after a3, 2s
-    EC2 Network Isolation       :crit, a5, after a4, 3s
-    IAM Role Detachment         :crit, a6, after a5, 2s
-    IMDSv2 Enforcement          :a7, after a6, 2s
-    
-    section Forensics
-    EBS Volume Snapshotting     :a8, after a7, 15s
-    EC2 Instance Shutdown       :a9, after a8, 5s
-    Fargate Malware Scan        :a10, after a9, 45s
-    
-    section Notification
-    Compile Final Report        :a11, after a10, 2s
-    Dispatch Slack/Jira Alert   :a12, after a11, 1s
+flowchart LR
+    A[GuardDuty finding] --> B[EventBridge]
+    B --> C[Lambda pipeline]
+    C --> D[PolicyEngine]
+    D --> E[EC2ContainmentPlaybook]
+    E --> F[AuditLogger]
+    D -.->|REQUIRE_APPROVAL| G[Slack/Jira]
 ```
 
 ## 🗂️ Project Structure
-- `src/`: Python code for the AWS Lambda responders.
-  - `lambda_function.py`: Main EC2 incident response playbook
-  - `s3_exfiltration_response.py`: S3 data exfiltration detection and response
-  - `iam_compromise_response.py`: IAM compromise detection and response
-  - `core/event_normalizer.py`: Unified event normalization (→ `UnifiedIncident`)
-  - `core/correlator.py`: Cross-cloud incident correlation engine
-  - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
-  - `integrations/scoring.py`: Risk scoring engine with anomaly boost
-  - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
-  - `core/process_containment.py`: Process-level containment via SSM Run Command
-  - `core/audit_logger.py`: Structured audit trail with CloudWatch/S3 archival
-  - `core/secret_rotation.py`: API key rotation manager (90-day policy)
+- `src/`: Python code for AWS Lambda responders.
+  - `handlers.py`: **Single entry** — `handle_event()`, `lambda_handler`
+  - `core/pipeline.py`: `IncidentPipeline` (normalize → correlate → policy → dispatch → audit)
+  - `core/event_normalizer.py`, `core/correlator.py`, `core/policy.py`, `core/audit_logger.py`
+  - `playbooks/`: **Only** containment execution (`ec2_containment`, `s3_exfiltration`, `iam_compromise`, …)
+  - `integrations/scoring.py`, `integrations/intel.py`, `integrations/anomaly_detector.py`
+  - `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py`: **deprecated** re-exports
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
   - `modules/monitoring/`: CloudWatch Dashboard and Alarms
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).
@@ -161,11 +152,11 @@ This will launch an interactive menu allowing you to:
 - **Behavioral Analytics**: Establishes behavioral baselines for users and service accounts to detect anomalies in IP location, temporal patterns (off-hours), and API action frequencies.
 - **Attack Forecaster**: Predictive security module that analyzes historical incidents to forecast probable future attack vectors and generates proactive security recommendations.
 
-### Workflow Engine (Step Functions)
-- **Human approval** workflows for critical actions
-- **Multi-step incident response** with retry logic
-- **Parallel execution** for isolation and forensics
-- **Error handling** and dead letter queue processing
+### Unified Incident Pipeline
+- **Single hot path:** `handlers.handle_event()` → `IncidentPipeline.process()`
+- **8 playbooks** registered in `handlers.py`
+- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation
+- **Legacy:** Step Functions modules in Terraform (if enabled) do not contain playbook logic
 
 ### Message Queue Layer (SQS)
 - **Buffer layer** prevents system overload during attacks
@@ -174,10 +165,8 @@ This will launch an interactive menu allowing you to:
 - **Cross-account message routing**
 
 ### Container Workers (ECS Fargate)
-- **Long-running operations** (15+ minute forensic scans)
-- **Full environment** access for comprehensive analysis
-- **Scalable compute** with auto-scaling
-- **Health monitoring** and graceful degradation
+- **Optional Terraform module** for long-running forensic scans (not on the Lambda hot path)
+- Forensic snapshots and metadata are also created inside playbooks (e.g. `EC2ContainmentPlaybook`)
 
 ### Multi-Account Security
 - **Centralized security account** with cross-account roles
@@ -218,7 +207,7 @@ This will launch an interactive menu allowing you to:
 ### Monitoring & Observability (Terraform)
 - **CloudWatch Dashboard** with incident volume, error rate, MTTR, SQS depth
 - **CloudWatch Alarms** for Lambda errors and DLQ backlogs
-- **Step Functions execution tracking** (success/fail/timeout)
+- **Lambda / pipeline audit** via `AuditLogger` → CloudWatch Logs
 - **SLO/SLI metrics** for playbook success rate
 
 ### Secret Rotation
@@ -272,14 +261,15 @@ aws ssm put-parameter --name "/soar/slack/webhook_url" --value "YOUR_WEBHOOK_URL
 
 ## 📊 Security Coverage
 
-| Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
-|-------------|-----------|---------------|---------------|-------------------|
-| EC2 Ransomware/Compromise | GuardDuty | < 30s | Scoring Engine | Workflow approval, Snapshot, Isolate |
-| S3 Exfiltration | CloudTrail | < 60s | Scoring Engine | Freeze bucket writes, Multi-Intel |
-| IAM Compromise | CloudTrail | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
-| EKS Pod Compromise | GuardDuty | < 20s | Scoring Engine | Pod Eviction, Quarantine Labels |
-| RDS Abuse | CloudTrail | < 30s | Scoring Engine | Forensic backup, isolate security group |
-| DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
+| Threat Type | Detection | Playbook | Notes |
+|-------------|-----------|----------|-------|
+| EC2 Ransomware/Compromise | GuardDuty | EC2ContainmentPlaybook | Scoring + optional approval |
+| S3 Exfiltration | CloudTrail | S3ExfiltrationPlaybook | `EVALUATE` decision path |
+| IAM Compromise | CloudTrail | IAMCompromisePlaybook | Key revoke, DenyAll |
+| EKS Pod Compromise | GuardDuty | EKSPodIsolationPlaybook | Pod eviction |
+| RDS Abuse | CloudTrail | RDSCompromisePlaybook | Forensic snapshot |
+| API / WAF abuse | WAF / API GW | APIGatewayAbusePlaybook | Rate / block patterns |
+| CI/CD supply chain | CodePipeline / CloudTrail | CICDSupplyChainPlaybook | Pipeline lockdown |
 
 ## 🔧 Configuration
 
@@ -328,8 +318,8 @@ Since this platform is built entirely on native Serverless architecture, the cos
 
 ### Estimated Monthly Cost (Low/Moderate Traffic): `~$5 - $15 / month`
 - **AWS GuardDuty:** Priced per GB of VPC Flow Logs / CloudTrail events analyzed. For a small/medium environment, this is usually under **$5-10/month**.
-- **AWS Step Functions:** 4,000 free state transitions per month. After that, \$0.025 per 1,000 standard transitions. SOAR workflows only trigger on critical findings, so cost is negligible (**< $1/month**).
-- **AWS Lambda:** 1 Million free requests/month. You will likely never exceed the free tier for SOAR actions (**$0**).
+- **AWS Lambda:** 1 Million free requests/month. Hot path is one invocation per incident (**$0** at lab scale).
+- **AWS Step Functions:** Only if legacy Terraform modules are enabled — **not** the application spine (**$0** when unused).
 - **AWS SQS / EventBridge:** Both offer massive free tiers (1+ Million events). Usage for this platform is negligible (**$0**).
 - **AWS ECS Fargate:** Billed per second of compute for forensics tasks. Since tasks only spin up during an incident and run for ~5-15 mins, cost is extremely low (**< $2/month**).
 - **Threat Intel (VirusTotal/AbuseIPDB):** Free Community API keys limit queries to ~500-1000/day. More than enough for SOAR alerts (**$0**).
