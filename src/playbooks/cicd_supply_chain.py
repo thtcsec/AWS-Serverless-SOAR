@@ -15,6 +15,7 @@ from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.core.metrics import PlaybookTimer, emit_metric
+from src.integrations.scoring import ScoringEngine
 from src.models.events import CodePipelineEvent
 from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
@@ -74,7 +75,13 @@ class CICDSupplyChainPlaybook(Playbook):
 
                 # Behavior-based scoring
                 risk_score = self._behavior_score(source_ip, actor, event_name)
-                decision = "AUTO_ISOLATE" if risk_score >= 70 else "REQUIRE_APPROVAL" if risk_score >= 40 else "IGNORE"
+                decision = (
+                    "AUTO_ISOLATE"
+                    if risk_score >= ScoringEngine.AUTO_ISOLATE_THRESHOLD
+                    else "REQUIRE_APPROVAL"
+                    if risk_score >= ScoringEngine.IGNORE_THRESHOLD
+                    else "IGNORE"
+                )
                 self.audit.log(
                     AuditAction.SCORING_DECISION,
                     resource_id,
@@ -130,7 +137,13 @@ class CICDSupplyChainPlaybook(Playbook):
         build_id: str,
     ) -> dict[str, Any]:
         risk_score = CICDSupplyChainPlaybook._behavior_score(source_ip, actor, event_name)
-        decision = "AUTO_ISOLATE" if risk_score >= 70 else "REQUIRE_APPROVAL" if risk_score >= 40 else "IGNORE"
+        decision = (
+            "AUTO_ISOLATE"
+            if risk_score >= ScoringEngine.AUTO_ISOLATE_THRESHOLD
+            else "REQUIRE_APPROVAL"
+            if risk_score >= ScoringEngine.IGNORE_THRESHOLD
+            else "IGNORE"
+        )
         planned_actions = [
             {
                 "step": 1,

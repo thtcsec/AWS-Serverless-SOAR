@@ -92,6 +92,19 @@ resource "aws_iam_policy" "soar_incident_response_policy" {
         Effect   = "Allow"
         Action   = "sns:Publish"
         Resource = aws_sns_topic.soar_alerts.arn
+      },
+      {
+        # CloudWatch custom metrics for SOAR pipeline observability
+        # Fixes AccessDenied on PutMetricData observed in lab run
+        Sid    = "CloudWatchMetrics"
+        Effect = "Allow"
+        Action = "cloudwatch:PutMetricData"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "SOAR"
+          }
+        }
       }
     ]
   })

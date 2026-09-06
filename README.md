@@ -36,7 +36,7 @@ flowchart LR
 
 **Entry point:** `src/handlers.py` → `handle_event()` (Terraform handler: `handlers.lambda_handler`)
 
-**Deprecated:** `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py` — re-export only. Step Functions Terraform modules (if present) are **legacy wiring**, not the business spine.
+**Deprecated:** `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py` — re-export only. Step Functions Terraform modules (if present) are **legacy wiring**, not the business spine. `src/queue_processor.py` routes SQS → `handlers.handle_event()` (no Step Functions fan-out).
 
 ### Logical Data Flow
 ```mermaid

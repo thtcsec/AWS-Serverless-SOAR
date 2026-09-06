@@ -44,3 +44,9 @@ variable "sns_alert_topic_arn" {
   type        = string
   default     = ""
 }
+
+variable "lab_mock_intel" {
+  description = "When true, ThreatIntelService returns deterministic mock scores (lab/demo only)."
+  type        = bool
+  default     = true
+}

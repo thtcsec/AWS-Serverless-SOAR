@@ -16,6 +16,12 @@ class ThreatIntelService:
 
     def get_ip_report(self, ip_address: str) -> dict[str, Any]:
         """Get combined report for an IP address."""
+        if os.environ.get("LAB_MOCK_INTEL", "").lower() in ("1", "true", "yes"):
+            return {
+                "ip": ip_address,
+                "virustotal": {"malicious": 20},
+                "abuseipdb": {"abuseConfidenceScore": 80},
+            }
         report = {
             "ip": ip_address,
             "virustotal": self._query_virustotal(ip_address),

@@ -16,7 +16,7 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
     *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
-    *   **Legacy:** Step Functions Terraform modules (if present) are transport/wiring only — not the business spine.
+    *   **Legacy:** Step Functions Terraform modules (if present) are transport/wiring only — not the business spine. `queue_processor` now routes SQS → `handle_event()` (no `start_execution`).
 *   **Containment Hierarchy (Function > Process > Container > Permission > Network):**
     *   **Process-Level:** Kill malicious processes and quarantine files via SSM Run Command.
     *   **Container-Level:** Evict compromised EKS pods and apply quarantine network labels.

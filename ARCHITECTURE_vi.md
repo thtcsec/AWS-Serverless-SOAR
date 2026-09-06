@@ -16,7 +16,7 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
     *   **Phê duyệt con người:** Slack/Jira khi `PolicyEngine` trả về `REQUIRE_APPROVAL`.
     *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident`.
     *   **Tương quan sự cố:** Nhóm cảnh báo theo IOC chung (IP, tác nhân, ±5 phút).
-    *   **Legacy:** Step Functions trong Terraform (nếu có) chỉ là wiring — không chứa logic playbook.
+    *   **Legacy:** Step Functions trong Terraform (nếu có) chỉ là wiring — không chứa logic playbook. `queue_processor` đẩy SQS → `handle_event()` (không gọi Step Functions).
 *   **Hệ thống phân cấp cách ly (Function > Process > Container > Permissions > Network):**
     *   **Tầng Process:** Kill các tiến trình độc hại và cách ly file qua SSM Run Command.
     *   **Tầng Container:** Trục xuất EKS pod nhiễm mã độc và gắn label cách ly mạng.

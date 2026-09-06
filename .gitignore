@@ -14,7 +14,14 @@ coverage.xml
 .terraform/
 .terraform.lock.hcl
 **/.terraform/*
+terraform/backend.generated.hcl
+terraform/.lambda_build/
+terraform/lambda_package.zip
+terraform/*.zip
 
 # Output files — NEVER commit
 *.txt
 !requirements.txt
+audit.log
+terraform/out-*.json
+terraform/test-event*.json

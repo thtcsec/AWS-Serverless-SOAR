@@ -134,21 +134,19 @@ resource "aws_sns_topic_subscription" "email_sub" {
 # 5. AUTOMATION (Lambda & EventBridge)
 # ==========================================
 
-# ZIP the unified SOAR source tree (shared by all responder Lambdas)
-data "archive_file" "soar_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../src"
-  output_path = "${path.module}/soar_lambda.zip"
-  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
+# ZIP built by scripts/build_lambda_package.ps1 (src/ + pip deps)
+locals {
+  lambda_package_path = "${path.module}/lambda_package.zip"
+  lambda_package_hash   = filebase64sha256(local.lambda_package_path)
 }
 
 resource "aws_lambda_function" "soar_responder" {
-  filename                       = data.archive_file.soar_lambda_zip.output_path
+  filename                       = local.lambda_package_path
   function_name                  = "soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "handlers.lambda_handler"
+  handler                        = "src.handlers.lambda_handler"
   runtime                        = "python3.12"
-  source_code_hash               = data.archive_file.soar_lambda_zip.output_base64sha256
+  source_code_hash               = local.lambda_package_hash
   memory_size                    = var.lambda_memory_size
   timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
@@ -161,6 +159,7 @@ resource "aws_lambda_function" "soar_responder" {
     variables = {
       ISOLATION_SG_ID = aws_security_group.isolation_sg.id
       SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
+      LAB_MOCK_INTEL  = var.lab_mock_intel ? "true" : "false"
     }
   }
 
@@ -206,20 +205,13 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 # 6. AUTOMATION: IAM COMPROMISE (Lambda & EventBridge)
 # ==========================================
 
-data "archive_file" "iam_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../src"
-  output_path = "${path.module}/iam_soar_lambda.zip"
-  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
-}
-
 resource "aws_lambda_function" "iam_soar_responder" {
-  filename                       = data.archive_file.iam_lambda_zip.output_path
+  filename                       = local.lambda_package_path
   function_name                  = "iam-soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "handlers.lambda_handler"
+  handler                        = "src.handlers.lambda_handler"
   runtime                        = "python3.12"
-  source_code_hash               = data.archive_file.iam_lambda_zip.output_base64sha256
+  source_code_hash               = local.lambda_package_hash
   memory_size                    = var.lambda_memory_size
   timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
@@ -230,7 +222,8 @@ resource "aws_lambda_function" "iam_soar_responder" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN = aws_sns_topic.soar_alerts.arn
+      SNS_TOPIC_ARN  = aws_sns_topic.soar_alerts.arn
+      LAB_MOCK_INTEL = var.lab_mock_intel ? "true" : "false"
     }
   }
 
@@ -266,20 +259,13 @@ resource "aws_lambda_permission" "allow_eventbridge_iam" {
 # 7. AUTOMATION: S3 EXFILTRATION (Lambda & EventBridge)
 # ==========================================
 
-data "archive_file" "s3_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../src"
-  output_path = "${path.module}/s3_soar_lambda.zip"
-  excludes    = ["__pycache__", "*.pyc", ".pytest_cache"]
-}
-
 resource "aws_lambda_function" "s3_soar_responder" {
-  filename                       = data.archive_file.s3_lambda_zip.output_path
+  filename                       = local.lambda_package_path
   function_name                  = "s3-soar-incident-responder"
   role                           = aws_iam_role.lambda_exec_role.arn
-  handler                        = "handlers.lambda_handler"
+  handler                        = "src.handlers.lambda_handler"
   runtime                        = "python3.12"
-  source_code_hash               = data.archive_file.s3_lambda_zip.output_base64sha256
+  source_code_hash               = local.lambda_package_hash
   memory_size                    = var.lambda_memory_size
   timeout                        = var.lambda_timeout
   reserved_concurrent_executions = var.lambda_reserved_concurrency
@@ -290,7 +276,8 @@ resource "aws_lambda_function" "s3_soar_responder" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN = aws_sns_topic.soar_alerts.arn
+      SNS_TOPIC_ARN  = aws_sns_topic.soar_alerts.arn
+      LAB_MOCK_INTEL = var.lab_mock_intel ? "true" : "false"
     }
   }
 

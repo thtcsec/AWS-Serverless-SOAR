@@ -1,248 +1,170 @@
 """
-Enterprise SOAR - Queue Processor Lambda
-Processes SQS messages and triggers Step Functions workflows
+SQS transport adapter — routes buffered events into the unified IncidentPipeline.
+
+DEPRECATED path: Step Functions fan-out. Application spine is handlers.handle_event().
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 import boto3
 
-# Configure logging
+from src.handlers import handle_event
+
 logger = logging.getLogger()
 logger.setLevel(getattr(logging, os.environ.get("LOG_LEVEL", "INFO")))
 
 
 def lambda_handler(event, context):
-    """
-    Process SQS messages and trigger appropriate workflows
-
-    Expected input: SQS batch event
-    Output: Processed messages and workflow executions
-    """
+    """Process SQS batch records and delegate each payload to handle_event()."""
     try:
-        logger.info(f"Processing {len(event.get('Records', []))} SQS messages")
+        records = event.get("Records", [])
+        logger.info("Processing %s SQS messages via unified pipeline", len(records))
 
-        step_function_client = boto3.client("stepfunctions")
-        step_function_arn = os.environ.get("STEP_FUNCTION_ARN")
         dlq_url = os.environ.get("DLQ_URL")
-
         processed_messages = 0
         failed_messages = 0
-        workflow_executions = []
+        pipeline_results: list[dict[str, Any]] = []
 
-        for record in event.get("Records", []):
+        for record in records:
+            message_id = record.get("messageId", "unknown")
             try:
-                # Parse message body
-                message_body = json.loads(record["body"])
-                message_id = record["messageId"]
+                message_body = _parse_record_body(record)
+                event_data = _to_pipeline_event(message_body)
 
-                logger.info(f"Processing message {message_id}")
-
-                # Validate message format
-                if not validate_message(message_body):
-                    logger.warning(f"Invalid message format for message {message_id}")
+                if not event_data:
+                    logger.warning("Unable to map message %s to pipeline event", message_id)
                     failed_messages += 1
                     continue
 
-                # Determine event type and route to appropriate workflow
-                _event_type = message_body.get("event_type", "")  # noqa: F841
-                event_source = message_body.get("event_source", "")
-
-                if event_source == "aws.guardduty":
-                    execution_arn = trigger_guardduty_workflow(step_function_client, step_function_arn, message_body)
-                    workflow_executions.append(
-                        {
-                            "message_id": message_id,
-                            "execution_arn": execution_arn,
-                            "workflow_type": "guardduty_incident_response",
-                        }
-                    )
-
-                elif event_source == "aws.iam":
-                    execution_arn = trigger_iam_workflow(step_function_client, step_function_arn, message_body)
-                    workflow_executions.append(
-                        {
-                            "message_id": message_id,
-                            "execution_arn": execution_arn,
-                            "workflow_type": "iam_incident_response",
-                        }
-                    )
-
-                elif event_source == "aws.s3":
-                    execution_arn = trigger_s3_workflow(step_function_client, step_function_arn, message_body)
-                    workflow_executions.append(
-                        {
-                            "message_id": message_id,
-                            "execution_arn": execution_arn,
-                            "workflow_type": "s3_incident_response",
-                        }
-                    )
-
-                else:
-                    logger.warning(f"Unknown event source: {event_source}")
-                    failed_messages += 1
-                    continue
-
+                result = handle_event(event_data)
+                pipeline_results.append(
+                    {
+                        "message_id": message_id,
+                        "status": "ok" if isinstance(result, dict) else "processed",
+                        "result_keys": sorted(result.keys()) if isinstance(result, dict) else [],
+                    }
+                )
                 processed_messages += 1
-                logger.info(f"Successfully triggered workflow for message {message_id}")
+                logger.info("Pipeline handled message %s", message_id)
 
-            except Exception as e:
-                logger.error(f"Error processing message {record.get('messageId', 'unknown')}: {str(e)}")
+            except Exception as exc:
+                logger.error("Error processing message %s: %s", message_id, exc)
                 failed_messages += 1
+                if dlq_url:
+                    try:
+                        send_to_dlq(record, dlq_url)
+                    except Exception as dlq_error:
+                        logger.error("Failed to send message to DLQ: %s", dlq_error)
 
-                # Send failed message to DLQ
-                try:
-                    send_to_dlq(record, dlq_url)
-                except Exception as dlq_error:
-                    logger.error(f"Failed to send message to DLQ: {str(dlq_error)}")
-
-        # Build response
         response = {
             "processed_messages": processed_messages,
             "failed_messages": failed_messages,
-            "total_messages": len(event.get("Records", [])),
-            "workflow_executions": workflow_executions,
+            "total_messages": len(records),
+            "pipeline_results": pipeline_results,
             "processing_timestamp": datetime.now(UTC).isoformat(),
-            "lambda_request_id": context.aws_request_id,
+            "lambda_request_id": getattr(context, "aws_request_id", None),
+            "spine": "handlers.handle_event",
         }
-
-        logger.info(f"Queue processing complete: {processed_messages} processed, {failed_messages} failed")
-
+        logger.info(
+            "Queue processing complete: %s processed, %s failed",
+            processed_messages,
+            failed_messages,
+        )
         return response
 
-    except Exception as e:
-        logger.error(f"Critical error in queue processor: {str(e)}")
-        raise e
-
-
-def validate_message(message_body):
-    """Validate message format and required fields"""
-    required_fields = ["event_source", "event_type", "event_time"]
-
-    for field in required_fields:
-        if field not in message_body:
-            logger.warning(f"Missing required field: {field}")
-            return False
-
-    return True
-
-
-def trigger_guardduty_workflow(sfn_client, sfn_arn, message):
-    """Trigger GuardDuty incident response workflow"""
-    try:
-        # Transform message for Step Functions
-        input_data = {
-            "detail": message.get("finding", {}),
-            "source": message.get("event_source"),
-            "time": message.get("event_time"),
-            "id": message.get("event_id"),
-            "account": message.get("account"),
-            "region": message.get("region"),
-            "routing_timestamp": message.get("routing_timestamp"),
-        }
-
-        # Start Step Function execution
-        response = sfn_client.start_execution(
-            stateMachineArn=sfn_arn,
-            name=f"guardduty-{message.get('event_id', 'unknown')}-{int(datetime.now(UTC).timestamp())}",
-            input=json.dumps(input_data),
-        )
-
-        logger.info(f"Started GuardDuty workflow execution: {response['executionArn']}")
-        return response["executionArn"]
-
-    except Exception as e:
-        logger.error(f"Failed to trigger GuardDuty workflow: {str(e)}")
+    except Exception as exc:
+        logger.error("Critical error in queue processor: %s", exc)
         raise
 
 
-def trigger_iam_workflow(sfn_client, sfn_arn, message):
-    """Trigger IAM incident response workflow"""
-    try:
-        # Transform message for Step Functions
-        input_data = {
-            "detail": message.get("event", {}),
-            "source": message.get("event_source"),
-            "time": message.get("event_time"),
-            "id": message.get("event_id"),
-            "account": message.get("account"),
-            "region": message.get("region"),
-            "routing_timestamp": message.get("routing_timestamp"),
+def _parse_record_body(record: dict[str, Any]) -> dict[str, Any]:
+    body = record.get("body", "{}")
+    if isinstance(body, dict):
+        payload = body
+    else:
+        payload = json.loads(body)
+
+    # SNS → SQS envelope
+    if isinstance(payload.get("Message"), str):
+        try:
+            payload = json.loads(payload["Message"])
+        except json.JSONDecodeError:
+            pass
+    return payload
+
+
+def _to_pipeline_event(message_body: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize SQS payloads (EventBridge, custom envelopes, or raw findings)."""
+    if not isinstance(message_body, dict):
+        return None
+
+    # Already an EventBridge / pipeline-ready event
+    if "detail" in message_body or "source" in message_body:
+        return message_body
+
+    event_source = message_body.get("event_source") or message_body.get("source")
+    if event_source == "aws.guardduty" or "finding" in message_body:
+        finding = message_body.get("finding") or message_body.get("detail") or {}
+        return {
+            "source": "aws.guardduty",
+            "detail-type": "GuardDuty Finding",
+            "detail": finding if isinstance(finding, dict) else {},
+            "id": message_body.get("event_id") or message_body.get("id"),
+            "account": message_body.get("account"),
+            "region": message_body.get("region"),
+            "time": message_body.get("event_time") or message_body.get("time"),
         }
 
-        # Start Step Function execution
-        response = sfn_client.start_execution(
-            stateMachineArn=sfn_arn,
-            name=f"iam-{message.get('event_id', 'unknown')}-{int(datetime.now(UTC).timestamp())}",
-            input=json.dumps(input_data),
-        )
-
-        logger.info(f"Started IAM workflow execution: {response['executionArn']}")
-        return response["executionArn"]
-
-    except Exception as e:
-        logger.error(f"Failed to trigger IAM workflow: {str(e)}")
-        raise
-
-
-def trigger_s3_workflow(sfn_client, sfn_arn, message):
-    """Trigger S3 incident response workflow"""
-    try:
-        # Transform message for Step Functions
-        input_data = {
-            "detail": message.get("event", {}),
-            "source": message.get("event_source"),
-            "time": message.get("event_time"),
-            "id": message.get("event_id"),
-            "account": message.get("account"),
-            "region": message.get("region"),
-            "routing_timestamp": message.get("routing_timestamp"),
+    if event_source in ("aws.iam", "aws.s3", "aws.cloudtrail") or "event" in message_body:
+        detail = message_body.get("event") or message_body.get("detail") or message_body
+        return {
+            "source": event_source or "aws.cloudtrail",
+            "detail-type": message_body.get("event_type") or "AWS API Call via CloudTrail",
+            "detail": detail if isinstance(detail, dict) else {},
+            "id": message_body.get("event_id") or message_body.get("id"),
+            "account": message_body.get("account"),
+            "region": message_body.get("region"),
+            "time": message_body.get("event_time") or message_body.get("time"),
         }
 
-        # Start Step Function execution
-        response = sfn_client.start_execution(
-            stateMachineArn=sfn_arn,
-            name=f"s3-{message.get('event_id', 'unknown')}-{int(datetime.now(UTC).timestamp())}",
-            input=json.dumps(input_data),
-        )
+    # Last resort: pass through if it looks like a security event
+    if any(k in message_body for k in ("protoPayload", "finding", "Records")):
+        return message_body
 
-        logger.info(f"Started S3 workflow execution: {response['executionArn']}")
-        return response["executionArn"]
-
-    except Exception as e:
-        logger.error(f"Failed to trigger S3 workflow: {str(e)}")
-        raise
+    return None
 
 
-def send_to_dlq(record, dlq_url):
-    """Send failed message to Dead Letter Queue"""
+def send_to_dlq(record: dict[str, Any], dlq_url: str) -> None:
+    """Send failed message to Dead Letter Queue (best-effort)."""
+    sqs_client = boto3.client("sqs")
     try:
-        sqs_client = boto3.client("sqs")
+        original = json.loads(record["body"]) if isinstance(record.get("body"), str) else record.get("body")
+    except (json.JSONDecodeError, TypeError, KeyError):
+        original = record.get("body")
 
-        # Add error information to message
-        enhanced_message = {
-            "original_message": json.loads(record["body"]),
-            "error_info": {
-                "failed_timestamp": datetime.now(UTC).isoformat(),
-                "failure_reason": "queue_processing_error",
-                "original_message_id": record["messageId"],
+    enhanced_message = {
+        "original_message": original,
+        "error_info": {
+            "failed_timestamp": datetime.now(UTC).isoformat(),
+            "failure_reason": "queue_processing_error",
+            "original_message_id": record.get("messageId"),
+        },
+    }
+    sqs_client.send_message(
+        QueueUrl=dlq_url,
+        MessageBody=json.dumps(enhanced_message),
+        MessageAttributes={
+            "OriginalMessageId": {
+                "DataType": "String",
+                "StringValue": str(record.get("messageId", "unknown")),
             },
-        }
-
-        sqs_client.send_message(
-            QueueUrl=dlq_url,
-            MessageBody=json.dumps(enhanced_message),
-            MessageAttributes={
-                "OriginalMessageId": {"DataType": "String", "StringValue": record["messageId"]},
-                "FailureReason": {"DataType": "String", "StringValue": "queue_processing_error"},
-            },
-        )
-
-        logger.info(f"Sent message {record['messageId']} to DLQ")
-
-    except Exception as e:
-        logger.error(f"Failed to send message to DLQ: {str(e)}")
-        raise
+            "FailureReason": {"DataType": "String", "StringValue": "queue_processing_error"},
+        },
+    )
+    logger.info("Sent message %s to DLQ", record.get("messageId"))
