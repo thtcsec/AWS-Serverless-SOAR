@@ -423,10 +423,7 @@ class SlackNotifier:
         resource = approval_data.get("resource") or "N/A"
         risk_score = approval_data.get("risk_score", "N/A")
         severity = approval_data.get("severity") or "MEDIUM"
-        resume_hint = (
-            f"Or invoke SOAR with "
-            f'`{{"approval_action":"approve","incident_id":"{incident_id}"}}`'
-        )
+        resume_hint = f'Or invoke SOAR with `{{"approval_action":"approve","incident_id":"{incident_id}"}}`'
 
         message = {
             "username": "SOAR Bot",
