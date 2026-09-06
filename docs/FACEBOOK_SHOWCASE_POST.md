@@ -24,7 +24,7 @@ Normalize → Correlate → Score → Decision → Playbook → Audit
 ```
 
 Decision bands:
-- **IGNORE** (&lt;40)
+- **IGNORE** (<40)
 - **REQUIRE_APPROVAL** (40–69) → Slack, không auto
 - **AUTO_ISOLATE** (≥70) → chạy playbook
 
