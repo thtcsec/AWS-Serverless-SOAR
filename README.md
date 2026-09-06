@@ -91,6 +91,13 @@ sequenceDiagram
 6. **Audit:** `AuditLogger` records every phase
 
 ### 🖼️ High-Level Architecture
+
+**Multi-cloud master (UIRP — shared spine):**
+
+![Master Architecture](images/master_architecture.png)
+
+**AWS lab detail:**
+
 ![Architecture Diagram](images/aws_soar.png)
 
 Legacy Step Functions–centric diagram: `images/aws_soar_deprecated_stepfunctions.png`
