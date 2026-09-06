@@ -19,6 +19,9 @@ terraform/.lambda_build/
 terraform/lambda_package.zip
 terraform/*.zip
 
+# Release build output
+dist/
+
 # Output files — NEVER commit
 *.txt
 !requirements.txt

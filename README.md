@@ -4,6 +4,7 @@
 
 # 🚀 AWS Serverless Security Orchestration, Automation, and Response (SOAR)
 
+![Release](https://img.shields.io/github/v/release/thtcsec/AWS-Serverless-SOAR?display_name=tag)
 ![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
@@ -12,7 +13,7 @@
 
 Automated security incident response platform that detects threats and automatically isolates compromised resources while preserving forensic evidence.
 
-**[🇬🇧 English Architecture Guide](./ARCHITECTURE.md) | [🇻🇳 Bản giải thích tiếng Việt](./ARCHITECTURE_vi.md)**
+**[🇬🇧 English Architecture Guide](./ARCHITECTURE.md) | [🇻🇳 Bản giải thích tiếng Việt](./ARCHITECTURE_vi.md) | [Changelog](./CHANGELOG.md) | [Migrate v1→v2](./MIGRATION_v2.md)**
 
 ## Architecture Overview
 
