@@ -44,6 +44,18 @@ We provide an all-in-one deployment script at `scripts/deploy.sh`. This script w
 
 ---
 
+## Lab stack (root `terraform/`)
+
+For the lightweight GuardDuty lab under `terraform/` (not `environments/prod`):
+
+1. Build the Lambda zip first: `.\scripts\build_lambda_package.ps1`
+2. Apply: `terraform -chdir=terraform apply -var="alert_email=you@email.com"`
+3. Or use the all-in-one lab script: `.\scripts\cloud_lab_aws.ps1 -Phase all -AlertEmail "you@email.com"`
+
+Handler path is `src.handlers.lambda_handler`. Set `lab_mock_intel=true` (default) for deterministic scoring without VirusTotal/AbuseIPDB keys.
+
+---
+
 ## 🔗 Configuring Integrations
 
 After deployment, you need to provide the secrets for your integrations securely via AWS Systems Manager (SSM) Parameter Store. 

@@ -12,7 +12,7 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
     *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15). Outputs: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
 *   **SOAR Platform:**
     *   **Event Routing:** EventBridge → SQS (optional buffer + DLQ) for resilient event delivery.
-    *   **Unified Pipeline:** AWS Lambda (`handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
+    *   **Unified Pipeline:** AWS Lambda (`src.handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
     *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.

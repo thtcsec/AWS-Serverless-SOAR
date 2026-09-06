@@ -21,7 +21,7 @@ Automated security incident response platform that detects threats and automatic
 ```mermaid
 flowchart LR
     A[Event Sources] --> B[EventBridge / SQS]
-    B --> C[handlers.lambda_handler]
+    B --> C[src.handlers.lambda_handler]
     C --> D[IncidentPipeline]
     D --> E[EventNormalizer]
     E --> F[IncidentCorrelator]
@@ -34,7 +34,7 @@ flowchart LR
     L --> I
 ```
 
-**Entry point:** `src/handlers.py` → `handle_event()` (Terraform handler: `handlers.lambda_handler`)
+**Entry point:** `src/handlers.py` → `handle_event()` (Terraform handler: `src.handlers.lambda_handler` via `scripts/build_lambda_package.ps1`)
 
 **Deprecated:** `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py` — re-export only. Step Functions Terraform modules (if present) are **legacy wiring**, not the business spine. `src/queue_processor.py` routes SQS → `handlers.handle_event()` (no Step Functions fan-out).
 
@@ -62,7 +62,7 @@ sequenceDiagram
 
     rect rgb(200, 220, 255)
         Note over EB,P: Unified pipeline
-        EB->>L: invoke (handlers.lambda_handler)
+        EB->>L: invoke (src.handlers.lambda_handler)
         L->>P: handle_event() → process()
         P->>P: normalize + correlate
         P->>PE: evaluate()

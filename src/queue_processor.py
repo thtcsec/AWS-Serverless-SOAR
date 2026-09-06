@@ -6,6 +6,7 @@ DEPRECATED path: Step Functions fan-out. Application spine is handlers.handle_ev
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -85,17 +86,12 @@ def lambda_handler(event, context):
 
 def _parse_record_body(record: dict[str, Any]) -> dict[str, Any]:
     body = record.get("body", "{}")
-    if isinstance(body, dict):
-        payload = body
-    else:
-        payload = json.loads(body)
+    payload = body if isinstance(body, dict) else json.loads(body)
 
     # SNS → SQS envelope
     if isinstance(payload.get("Message"), str):
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             payload = json.loads(payload["Message"])
-        except json.JSONDecodeError:
-            pass
     return payload
 
 

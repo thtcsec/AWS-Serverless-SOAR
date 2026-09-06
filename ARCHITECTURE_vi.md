@@ -12,7 +12,7 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
     *   **Scoring Engine (0-100):** Tính toán động `risk_score` kết hợp độ tin cậy tình báo, mức độ nghiêm trọng, và anomaly boost (+15). Đầu ra: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
 *   **Nền tảng SOAR:**
     *   **Định tuyến sự kiện:** EventBridge → SQS (buffer tùy chọn + DLQ).
-    *   **Pipeline thống nhất:** Lambda (`handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`).
+    *   **Pipeline thống nhất:** Lambda (`src.handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`).
     *   **Phê duyệt con người:** Slack/Jira khi `PolicyEngine` trả về `REQUIRE_APPROVAL`.
     *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident`.
     *   **Tương quan sự cố:** Nhóm cảnh báo theo IOC chung (IP, tác nhân, ±5 phút).
