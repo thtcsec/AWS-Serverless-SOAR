@@ -13,7 +13,7 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
 *   **SOAR Platform:**
     *   **Event Routing:** EventBridge → SQS (optional buffer + DLQ) for resilient event delivery.
     *   **Unified Pipeline:** AWS Lambda (`src.handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
-    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
+    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`. Pending incidents are persisted (`APPROVAL_STORE=memory|dynamodb`) and resumed via Slack Block Kit buttons (`soar_approve` / `soar_reject`) or API envelope `{"approval_action":"approve","incident_id":"..."}`. Interactivity URL → `slack_interactions` handler (+ `SLACK_SIGNING_SECRET`).
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
     *   **Legacy:** Step Functions Terraform modules (if present) are transport/wiring only — not the business spine. `queue_processor` now routes SQS → `handle_event()` (no `start_execution`).

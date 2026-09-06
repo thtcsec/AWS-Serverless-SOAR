@@ -408,16 +408,89 @@ class SlackNotifier:
                 "timestamp": datetime.now(UTC).isoformat(),
             }
 
+    def send_interactive_approval(self, approval_data: dict) -> dict:
+        """
+        Post a Block Kit approval request (Approve / Reject).
+
+        Interactive button clicks require a Slack App Interactivity Request URL
+        pointing at slack_interactions HTTP handler. Incoming webhooks can still
+        render the blocks for analysts; resume also works via API:
+        {"approval_action":"approve","incident_id":"..."}.
+        """
+        incident_id = str(approval_data.get("incident_id") or "unknown")
+        title = approval_data.get("title") or "Approval Required"
+        description = approval_data.get("description") or "Manual approval required before remediation."
+        resource = approval_data.get("resource") or "N/A"
+        risk_score = approval_data.get("risk_score", "N/A")
+        severity = approval_data.get("severity") or "MEDIUM"
+        resume_hint = (
+            f"Or invoke SOAR with "
+            f'`{{"approval_action":"approve","incident_id":"{incident_id}"}}`'
+        )
+
+        message = {
+            "username": "SOAR Bot",
+            "icon_emoji": ":warning:",
+            "text": f":warning: *{title}*",
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": "SOAR Approval Required"},
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*Incident*\n`{incident_id}`"},
+                        {"type": "mrkdwn", "text": f"*Severity*\n{severity}"},
+                        {"type": "mrkdwn", "text": f"*Risk score*\n{risk_score}"},
+                        {"type": "mrkdwn", "text": f"*Resource*\n`{resource}`"},
+                    ],
+                },
+                {"type": "section", "text": {"type": "mrkdwn", "text": description}},
+                {
+                    "type": "actions",
+                    "block_id": f"soar_approval_{incident_id}",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Approve containment"},
+                            "style": "danger",
+                            "action_id": "soar_approve",
+                            "value": incident_id,
+                        },
+                        {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Reject"},
+                            "action_id": "soar_reject",
+                            "value": incident_id,
+                        },
+                    ],
+                },
+                {
+                    "type": "context",
+                    "elements": [{"type": "mrkdwn", "text": resume_hint}],
+                },
+            ],
+        }
+
+        response = self._send_slack_message(message)
+        return {
+            "notification_sent": True,
+            "message_type": "interactive_approval",
+            "incident_id": incident_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "slack_response": response,
+        }
+
     def send_approval_request(self, approval_data):
         """
-        Send human approval request to Slack
+        Send human approval request to Slack.
 
-        Args:
-            approval_data (dict): Approval request information
-
-        Returns:
-            dict: Notification result
+        Prefer Block Kit interactive path when incident_id is present.
         """
+        if approval_data.get("incident_id"):
+            return self.send_interactive_approval(approval_data)
+
         try:
             instance_id = approval_data.get("instance_id", "Unknown")
             severity = approval_data.get("severity_level", "MEDIUM")
