@@ -5,6 +5,14 @@ All notable changes to **AWS Serverless SOAR** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] — 2026-09-16
+
+### Added
+- Nickel policy source `config/soar_policy.ncl` (+ exported `soar_policy.json`)
+- `ScoringEngine` thresholds loaded from Nickel JSON artifact
+- Scripts `export_ncl_config.py` / `check_ncl_export.py`; CI Nickel export sync check
+- Pipeline perf smoke test (`tests/test_pipeline_perf.py`)
+
 ## [2.1.0] — 2026-09-16
 
 ### Added

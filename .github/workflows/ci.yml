@@ -24,6 +24,17 @@ jobs:
         pip install -r requirements.txt
         pip install ruff pip-audit
         
+    - name: Install Nickel
+      run: |
+        curl -fsSL -o /tmp/nickel "https://github.com/nickel-lang/nickel/releases/download/1.14.0/nickel-x86_64-linux"
+        chmod +x /tmp/nickel
+        sudo mv /tmp/nickel /usr/local/bin/nickel
+        nickel --version
+
+    - name: Validate Nickel policy export
+      run: |
+        python scripts/check_ncl_export.py
+
     - name: Lint with Ruff
       run: |
         ruff check src tests

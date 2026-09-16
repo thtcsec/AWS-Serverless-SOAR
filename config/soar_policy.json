@@ -1,0 +1,7 @@
+{
+  "anomaly_boost": 15,
+  "anomaly_flag_threshold": -0.5,
+  "auto_isolate_threshold": 70,
+  "ignore_threshold": 40,
+  "schema_version": 1
+}
