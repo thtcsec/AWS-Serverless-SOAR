@@ -9,7 +9,8 @@ This system implements a **Decision-Based Orchestration** flow with multi-layer 
     *   **VirusTotal:** Aggregates ~70 malware engines and sandbox reports for IP reputation.
     *   **AbuseIPDB:** Real-time crowd-sourced reports on brute-force, botnets, and scanning activity.
     *   **ML Anomaly Detection (Isolation Forest):** Behavioral analysis using feature vectors (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) with Z-Score fallback.
-    *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15). Outputs: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
+    *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15 when `anomaly_score` &lt; flag threshold). Canonical bands come from **Nickel** `config/soar_policy.ncl` → `config/soar_policy.json` → `ScoringEngine`: `IGNORE (&lt;40)`, `REQUIRE_APPROVAL (40–69)`, `AUTO_ISOLATE (≥70)`.
+    *   **ThreatClassifier:** Attaches MITRE ATT&amp;CK TTPs (`mitre_ttps`) on the pipeline response after scoring.
 *   **SOAR Platform:**
     *   **Event Routing:** EventBridge → SQS (optional buffer + DLQ) for resilient event delivery.
     *   **Unified Pipeline:** AWS Lambda (`src.handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.

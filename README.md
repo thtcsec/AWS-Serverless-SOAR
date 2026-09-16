@@ -88,7 +88,8 @@ sequenceDiagram
 2. **Transport:** EventBridge → optional SQS buffer (+ DLQ)
 3. **Pipeline:** `IncidentPipeline` — normalize → correlate → score → decision → dispatch
 4. **Playbooks:** containment logic lives only under `src/playbooks/`
-5. **Policy gate:** `IGNORE` (<40) | `REQUIRE_APPROVAL` (40–69) | `AUTO_ISOLATE` (≥70) | `EVALUATE` (domain-specific, e.g. S3 exfil)
+5. **Policy gate:** `IGNORE` (<40) | `REQUIRE_APPROVAL` (40–69) | `AUTO_ISOLATE` (≥70) | `EVALUATE` (domain-specific, e.g. S3 exfil)  
+   Bands + anomaly boost are defined in **`config/soar_policy.ncl`** (Nickel), exported to `config/soar_policy.json`, and loaded by `ScoringEngine` at runtime. Sync check: `python scripts/check_ncl_export.py` (CI installs Nickel).
 6. **Audit:** `AuditLogger` records every phase
 
 ### 🖼️ High-Level Architecture
@@ -127,13 +128,16 @@ flowchart LR
 ```
 
 ## 🗂️ Project Structure
+- `config/`: Nickel policy source (`soar_policy.ncl`) + exported JSON consumed by Python
 - `src/`: Python code for AWS Lambda responders.
-  - `handlers.py`: **Single entry** — `handle_event()`, `lambda_handler`
-  - `core/pipeline.py`: `IncidentPipeline` (normalize → correlate → policy → dispatch → audit)
+  - `handlers.py`: **Single entry** — `handle_event()`, `lambda_handler`, `health()`
+  - `core/pipeline.py`: `IncidentPipeline` (normalize → correlate → policy → classify → dispatch → audit)
+  - `core/policy_config.py`: loads Nickel-exported decision bands
   - `core/event_normalizer.py`, `core/correlator.py`, `core/policy.py`, `core/audit_logger.py`
   - `playbooks/`: **Only** containment execution (`ec2_containment`, `s3_exfiltration`, `iam_compromise`, …)
   - `integrations/scoring.py`, `integrations/intel.py`, `integrations/anomaly_detector.py`
   - `lambda_function.py`, `iam_compromise_response.py`, `s3_exfiltration_response.py`: **deprecated** re-exports
+- `scripts/export_ncl_config.py`, `scripts/check_ncl_export.py`: regenerate / verify policy JSON
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all AWS resources.
   - `modules/monitoring/`: CloudWatch Dashboard and Alarms
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting EC2, S3, and IAM).

@@ -9,7 +9,8 @@ Hệ thống này triển khai luồng **Điều phối Dựa trên Quyết đ�
     *   **VirusTotal:** Tổng hợp báo cáo từ ~70 engine diệt mã độc để kiểm tra uy tín IP.
     *   **AbuseIPDB:** Báo cáo thời gian thực từ cộng đồng về các hoạt động brute-force, botnet và quét lỗ hổng.
     *   **Phát hiện bất thường ML (Isolation Forest):** Phân tích hành vi sử dụng feature vector (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) với fallback Z-Score.
-    *   **Scoring Engine (0-100):** Tính toán động `risk_score` kết hợp độ tin cậy tình báo, mức độ nghiêm trọng, và anomaly boost (+15). Đầu ra: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
+    *   **Scoring Engine (0-100):** Tính `risk_score` từ threat intel, severity, và anomaly boost (+15 khi vượt ngưỡng flag). Ngưỡng quyết định lấy từ **Nickel** `config/soar_policy.ncl` → JSON → `ScoringEngine`: `IGNORE (&lt;40)`, `REQUIRE_APPROVAL (40–69)`, `AUTO_ISOLATE (≥70)`.
+    *   **ThreatClassifier:** Gắn MITRE ATT&amp;CK TTPs (`mitre_ttps`) vào response sau bước scoring.
 *   **Nền tảng SOAR:**
     *   **Định tuyến sự kiện:** EventBridge → SQS (buffer tùy chọn + DLQ).
     *   **Pipeline thống nhất:** Lambda (`src.handlers.lambda_handler` → `handle_event()` → `IncidentPipeline`).
