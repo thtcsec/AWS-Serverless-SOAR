@@ -36,6 +36,8 @@ class UnifiedIncident(BaseModel):
     resource_type: str = ""
     risk_score: float = 0.0
     decision: str = "IGNORE"
+    anomaly_score: float = 0.0
+    threat_classification: dict[str, Any] = Field(default_factory=dict)
     intel_summary: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     raw_event_type: str = ""

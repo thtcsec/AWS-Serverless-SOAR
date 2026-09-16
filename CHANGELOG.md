@@ -5,6 +5,18 @@ All notable changes to **AWS Serverless SOAR** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — 2026-09-16
+
+### Added
+- PolicyEngine wires `AnomalyDetector` into live scoring (`anomaly_score` + optional +15 boost)
+- Pipeline attaches MITRE TTPs via `ThreatClassifier` (`mitre_ttps`, `threat_type` on responses)
+- Auto-archive audit trail on finalize when `AUDIT_BUCKET` is set
+- Decision metrics: `Decision`, `RiskScore`, `PendingApproval`, `Ignored`
+- Lambda `health()` probe (`{"health": true}` / `{"action":"health"}`)
+
+### Changed
+- `UnifiedIncident` carries `anomaly_score` and `threat_classification`
+
 ## [2.0.0] — 2026-09-06
 
 ### Added

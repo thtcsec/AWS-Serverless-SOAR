@@ -58,6 +58,20 @@ class TestHandleEvent:
         assert result["statusCode"] == 500
         assert result["body"] == "Internal Server Error"
 
+    def test_health_probe(self):
+        from src.handlers import health
+
+        result = health()
+        assert result["statusCode"] == 200
+        assert result["body"]["status"] == "ok"
+        assert result["body"]["pipeline"] == "IncidentPipeline"
+        assert "EC2ContainmentPlaybook" in result["body"]["playbooks_registered"]
+
+    def test_lambda_handler_health_shortcut(self):
+        result = lambda_handler({"health": True}, None)
+        assert result["statusCode"] == 200
+        assert result["body"]["status"] == "ok"
+
 
 class TestImports:
     def test_import_handlers(self):

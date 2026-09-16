@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.core.event_normalizer import UnifiedIncident
+from src.integrations.anomaly_detector import AnomalyDetector
 from src.integrations.intel import ThreatIntelService
 from src.integrations.scoring import ScoringEngine
 
@@ -34,9 +35,11 @@ class PolicyEngine:
         self,
         intel_service: ThreatIntelService | None = None,
         scoring_engine: ScoringEngine | None = None,
+        anomaly_detector: AnomalyDetector | None = None,
     ) -> None:
         self._intel = intel_service or ThreatIntelService()
         self._scoring = scoring_engine or ScoringEngine()
+        self._anomaly = anomaly_detector or AnomalyDetector()
 
     def evaluate(self, incident: UnifiedIncident) -> dict[str, Any]:
         if incident.raw_event_type in _EVALUATE_TYPES:
@@ -69,9 +72,7 @@ class PolicyEngine:
             intel_report = self._intel.get_ip_report(source_ip)
             incident.intel_summary = intel_report
 
-        result = self._scoring.calculate_risk_score(intel_report, base_severity)
-        self._apply_result(incident, result)
-        return result
+        return self._score_with_anomaly(incident, intel_report, base_severity)
 
     def _evaluate_iam(self, incident: UnifiedIncident) -> dict[str, Any]:
         caller_ip = incident.source_ip
@@ -90,9 +91,7 @@ class PolicyEngine:
             intel_report = self._intel.get_ip_report(caller_ip)
             incident.intel_summary = intel_report
 
-        result = self._scoring.calculate_risk_score(intel_report, base_risk)
-        self._apply_result(incident, result)
-        return result
+        return self._score_with_anomaly(incident, intel_report, base_risk)
 
     def _evaluate_s3(self, incident: UnifiedIncident) -> dict[str, Any]:
         result = {
@@ -102,6 +101,7 @@ class PolicyEngine:
             "recommended_action": "evaluate_exfiltration_patterns",
             "summary": "Pipeline delegated evaluation to S3 playbook.",
             "breakdown": {},
+            "anomaly_score": 0.0,
         }
         self._apply_result(incident, result)
         return result
@@ -115,14 +115,77 @@ class PolicyEngine:
             intel_report = self._intel.get_ip_report(incident.source_ip)
             incident.intel_summary = intel_report
 
-        result = self._scoring.calculate_risk_score(intel_report, base)
+        return self._score_with_anomaly(incident, intel_report, base)
+
+    def _score_with_anomaly(
+        self,
+        incident: UnifiedIncident,
+        intel_report: dict[str, Any],
+        base_severity: float,
+    ) -> dict[str, Any]:
+        features = self._build_anomaly_features(incident, intel_report, base_severity)
+        anomaly_score = self._anomaly.predict(features)
+        if anomaly_score == 0.0 and len(self._anomaly._history) < 2:
+            anomaly_score = self._heuristic_anomaly(features)
+        self._observe_anomaly(features)
+
+        result = self._scoring.calculate_risk_score(
+            intel_report,
+            base_severity,
+            anomaly_score=anomaly_score,
+        )
+        result["anomaly_score"] = anomaly_score
+        breakdown = dict(result.get("breakdown") or {})
+        breakdown["anomaly_score"] = anomaly_score
+        result["breakdown"] = breakdown
         self._apply_result(incident, result)
         return result
+
+    def _observe_anomaly(self, features: dict[str, float]) -> None:
+        """Grow z-score baseline so subsequent events can detect outliers."""
+        try:
+            self._anomaly._history.append(self._anomaly._extract_features(features))
+            if len(self._anomaly._history) > 500:
+                self._anomaly._history = self._anomaly._history[-500:]
+        except Exception as exc:
+            logger.debug("anomaly observe skipped: %s", exc)
+
+    @staticmethod
+    def _build_anomaly_features(
+        incident: UnifiedIncident,
+        intel_report: dict[str, Any],
+        base_severity: float,
+    ) -> dict[str, float]:
+        now = datetime.now(UTC)
+        abuse = float(intel_report.get("abuseipdb", {}).get("abuseConfidenceScore", 0) or 0)
+        vt = float(intel_report.get("virustotal", {}).get("malicious", 0) or 0)
+        return {
+            "hour_of_day": float(now.hour),
+            "day_of_week": float(now.weekday()),
+            "ip_reputation_score": max(abuse, vt * 10.0),
+            "action_risk_level": float(base_severity),
+            "request_frequency": float(len(incident.related_incidents) + 1),
+        }
+
+    @staticmethod
+    def _heuristic_anomaly(features: dict[str, float]) -> float:
+        """Cold-start anomaly signal when ML/z-score baseline is empty."""
+        hour = features.get("hour_of_day", 12.0)
+        risk = features.get("action_risk_level", 0.0)
+        ip_rep = features.get("ip_reputation_score", 0.0)
+        if ip_rep >= 80:
+            return -0.8
+        if (hour >= 23 or hour <= 5) and risk >= 7:
+            return -0.7
+        if risk >= 9:
+            return -0.55
+        return 0.0
 
     @staticmethod
     def _apply_result(incident: UnifiedIncident, result: dict[str, Any]) -> None:
         incident.risk_score = float(result.get("risk_score", 0.0))
         incident.decision = str(result.get("decision", "IGNORE"))
+        incident.anomaly_score = float(result.get("anomaly_score", 0.0))
 
     @staticmethod
     def _extract_guardduty_ip(raw_event: dict[str, Any]) -> str:

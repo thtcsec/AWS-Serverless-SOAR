@@ -36,3 +36,10 @@ class TestScoringEngine:
         result = ScoringEngine.calculate_risk_score(intel_data, initial_severity=2.0)
         assert result["risk_score"] == 11.0
         assert result["decision"] == "IGNORE"
+
+    def test_anomaly_boost_adds_fifteen_points(self):
+        result = ScoringEngine.calculate_risk_score({}, initial_severity=5.0, anomaly_score=-0.8)
+        # 15 + 15 = 30
+        assert result["risk_score"] == 30.0
+        assert result["breakdown"]["anomaly_boost"] == 15.0
+        assert result["decision"] == "IGNORE"

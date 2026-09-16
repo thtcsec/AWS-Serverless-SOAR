@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from src.core.pipeline import IncidentPipeline
+from src.integrations.scoring import ScoringEngine
 from src.playbooks.api_gateway_abuse import APIGatewayAbusePlaybook
 from src.playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
 from src.playbooks.ec2_containment import EC2ContainmentPlaybook
@@ -46,9 +47,29 @@ def handle_event(event_data: dict[str, Any]) -> dict[str, Any]:
     return pipeline.process(event_data)
 
 
+def health() -> dict[str, Any]:
+    """Liveness / status probe (parity with GCP health entrypoint)."""
+    return {
+        "statusCode": 200,
+        "body": {
+            "status": "ok",
+            "service": "soar-incident-responder",
+            "pipeline": "IncidentPipeline",
+            "playbooks_registered": [p.__class__.__name__ for p in registry._playbooks],
+            "scoring": {
+                "ignore_threshold": ScoringEngine.IGNORE_THRESHOLD,
+                "auto_isolate_threshold": ScoringEngine.AUTO_ISOLATE_THRESHOLD,
+                "formula": "(vt_malicious*2) + (abuse_score*0.5) + (severity*3) + anomaly_boost",
+            },
+        },
+    }
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """AWS Lambda transport adapter — delegates to handle_event()."""
     try:
+        if isinstance(event, dict) and (event.get("health") is True or event.get("action") == "health"):
+            return health()
         return handle_event(event)
     except Exception as exc:
         logger.error(f"Critical Engine Failure: {exc}")

@@ -9,14 +9,17 @@ Human approval: REQUIRE_APPROVAL → persist + Slack → resume via approval_act
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from src.core.approval_store import ApprovalStore, build_pending_record, get_approval_store
 from src.core.audit_logger import AuditAction, AuditLogger, get_audit_logger
 from src.core.correlator import IncidentCorrelator
 from src.core.event_normalizer import EventNormalizer, UnifiedIncident
+from src.core.metrics import emit_metric
 from src.core.policy import PolicyEngine
 from src.integrations.slack_notifier import SlackNotifier
+from src.ml.threat_classifier import ThreatClassifier
 from src.playbooks.registry import PlaybookRegistry
 
 logger = logging.getLogger("aws-soar.pipeline")
@@ -34,12 +37,14 @@ class IncidentPipeline:
         audit: AuditLogger | None = None,
         correlator: IncidentCorrelator | None = None,
         approval_store: ApprovalStore | None = None,
+        threat_classifier: ThreatClassifier | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy or PolicyEngine()
         self._audit = audit or get_audit_logger()
         self._correlator = correlator or _correlator
         self._approvals = approval_store or get_approval_store()
+        self._classifier = threat_classifier or ThreatClassifier()
 
     def process(self, event_data: dict[str, Any]) -> dict[str, Any]:
         # Resume path: Slack button / manual invoke
@@ -90,12 +95,16 @@ class IncidentPipeline:
         )
 
         score_result = self._policy.evaluate(incident)
+        classification = self._classify(incident)
+        score_result = {**score_result, **classification}
+        self._emit_decision_metrics(incident)
         self._audit.log(
             AuditAction.SCORING_DECISION,
             resource_id=incident.incident_id,
             details={
                 "risk_score": incident.risk_score,
                 "decision": incident.decision,
+                "anomaly_score": incident.anomaly_score,
                 "score_result": score_result,
             },
         )
@@ -108,6 +117,7 @@ class IncidentPipeline:
                     "incident_id": incident.incident_id,
                     "decision": incident.decision,
                     "risk_score": incident.risk_score,
+                    **classification,
                 },
             )
 
@@ -120,6 +130,7 @@ class IncidentPipeline:
                     "incident_id": incident.incident_id,
                     "decision": incident.decision,
                     "risk_score": incident.risk_score,
+                    **classification,
                 },
             )
 
@@ -130,6 +141,7 @@ class IncidentPipeline:
                     "status": "no_action",
                     "incident_id": incident.incident_id,
                     "decision": incident.decision,
+                    **classification,
                 },
             )
 
@@ -212,13 +224,23 @@ class IncidentPipeline:
             success=success,
         )
 
+        enrichment = self._classification_fields(incident)
         if isinstance(result, dict):
-            return {"statusCode": 200, "body": result}
+            body = {**result, **{k: v for k, v in enrichment.items() if k not in result}}
+            self._archive_audit()
+            return {"statusCode": 200, "body": body}
 
         if result:
-            return {"statusCode": 200, "body": {"status": "executed", "incident_id": incident.incident_id}}
+            self._archive_audit()
+            return {
+                "statusCode": 200,
+                "body": {"status": "executed", "incident_id": incident.incident_id, **enrichment},
+            }
 
-        return {"statusCode": 500, "body": {"status": "failed", "incident_id": incident.incident_id}}
+        return {
+            "statusCode": 500,
+            "body": {"status": "failed", "incident_id": incident.incident_id, **enrichment},
+        }
 
     def _request_approval(self, incident: UnifiedIncident, score_result: dict[str, Any]) -> None:
         self._audit.log(
@@ -254,10 +276,57 @@ class IncidentPipeline:
         except Exception as exc:
             logger.warning("Approval notification failed (non-fatal): %s", exc)
 
+    def _classify(self, incident: UnifiedIncident) -> dict[str, Any]:
+        try:
+            payload = incident.model_dump(exclude={"raw_event", "threat_classification"})
+            result = self._classifier.predict_threat_severity(payload)
+            incident.threat_classification = result
+            return self._classification_fields(incident)
+        except Exception as exc:
+            logger.warning("Threat classification failed (non-fatal): %s", exc)
+            return {}
+
+    @staticmethod
+    def _classification_fields(incident: UnifiedIncident) -> dict[str, Any]:
+        tc = incident.threat_classification or {}
+        if not tc and incident.anomaly_score == 0.0:
+            return {}
+        fields: dict[str, Any] = {"anomaly_score": incident.anomaly_score}
+        if tc.get("threat_type"):
+            fields["threat_type"] = tc["threat_type"]
+        if tc.get("mitre_ttps") is not None:
+            fields["mitre_ttps"] = tc.get("mitre_ttps") or []
+        if tc.get("confidence") is not None:
+            fields["classification_confidence"] = tc["confidence"]
+        if tc.get("predicted_severity"):
+            fields["predicted_severity"] = tc["predicted_severity"]
+        return fields
+
+    def _emit_decision_metrics(self, incident: UnifiedIncident) -> None:
+        dims = {"Decision": incident.decision or "UNKNOWN"}
+        emit_metric("Decision", 1.0, "Count", dims)
+        emit_metric("RiskScore", float(incident.risk_score), "None", dims)
+        if incident.decision == "REQUIRE_APPROVAL":
+            emit_metric("PendingApproval", 1.0, "Count", dims)
+        elif incident.decision == "IGNORE":
+            emit_metric("Ignored", 1.0, "Count", dims)
+
+    def _archive_audit(self) -> None:
+        bucket = os.environ.get("AUDIT_BUCKET", "").strip()
+        if not bucket:
+            return
+        try:
+            self._audit.export_to_s3(bucket)
+        except Exception as exc:
+            logger.warning("Audit archive failed (non-fatal): %s", exc)
+
     def _finalize(self, incident: UnifiedIncident, body: dict[str, Any]) -> dict[str, Any]:
+        enrichment = self._classification_fields(incident)
+        merged = {**enrichment, **body}
         self._audit.log(
             AuditAction.PLAYBOOK_COMPLETED,
             resource_id=incident.incident_id,
-            details={"phase": "complete", **body},
+            details={"phase": "complete", **merged},
         )
-        return {"statusCode": 200, "body": body}
+        self._archive_audit()
+        return {"statusCode": 200, "body": merged}
