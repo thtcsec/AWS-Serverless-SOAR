@@ -30,11 +30,7 @@ class ScoringEngine:
         vt_malicious = intel_data.get("virustotal", {}).get("malicious", 0)
         abuse_score = intel_data.get("abuseipdb", {}).get("abuseConfidenceScore", 0)
 
-        anomaly_boost = (
-            ScoringEngine.ANOMALY_BOOST
-            if anomaly_score < ScoringEngine.ANOMALY_FLAG_THRESHOLD
-            else 0.0
-        )
+        anomaly_boost = ScoringEngine.ANOMALY_BOOST if anomaly_score < ScoringEngine.ANOMALY_FLAG_THRESHOLD else 0.0
 
         raw_score = (vt_malicious * 2) + (abuse_score * 0.5) + (initial_severity * 3) + anomaly_boost
         normalized_score = min(float(raw_score), 100.0)
