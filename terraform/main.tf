@@ -137,7 +137,7 @@ resource "aws_sns_topic_subscription" "email_sub" {
 # ZIP built by scripts/build_lambda_package.ps1 (src/ + pip deps)
 locals {
   lambda_package_path = "${path.module}/lambda_package.zip"
-  lambda_package_hash   = filebase64sha256(local.lambda_package_path)
+  lambda_package_hash = filebase64sha256(local.lambda_package_path)
 }
 
 resource "aws_lambda_function" "soar_responder" {
@@ -156,11 +156,11 @@ resource "aws_lambda_function" "soar_responder" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.approval_env, {
       ISOLATION_SG_ID = aws_security_group.isolation_sg.id
       SNS_TOPIC_ARN   = aws_sns_topic.soar_alerts.arn
       LAB_MOCK_INTEL  = var.lab_mock_intel ? "true" : "false"
-    }
+    })
   }
 
   tags = {
@@ -221,10 +221,10 @@ resource "aws_lambda_function" "iam_soar_responder" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.approval_env, {
       SNS_TOPIC_ARN  = aws_sns_topic.soar_alerts.arn
       LAB_MOCK_INTEL = var.lab_mock_intel ? "true" : "false"
-    }
+    })
   }
 
   tags = {
@@ -275,10 +275,10 @@ resource "aws_lambda_function" "s3_soar_responder" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.approval_env, {
       SNS_TOPIC_ARN  = aws_sns_topic.soar_alerts.arn
       LAB_MOCK_INTEL = var.lab_mock_intel ? "true" : "false"
-    }
+    })
   }
 
   tags = {

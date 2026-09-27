@@ -5,6 +5,12 @@ All notable changes to **AWS Serverless SOAR** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] — 2026-09-27
+
+### Added
+- Lab Terraform DynamoDB table `soar-pending-approvals` and IAM for pending approvals
+- Responder Lambdas set `APPROVAL_STORE=dynamodb` and `APPROVAL_TABLE`
+
 ## [2.1.2] — 2026-09-16
 
 ### Added

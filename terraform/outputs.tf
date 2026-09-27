@@ -17,3 +17,8 @@ output "lambda_function_name" {
   description = "Name of the SOAR execution lambda function"
   value       = aws_lambda_function.soar_responder.function_name
 }
+
+output "approval_table_name" {
+  description = "DynamoDB table for pending REQUIRE_APPROVAL records"
+  value       = aws_dynamodb_table.pending_approvals.name
+}
