@@ -167,7 +167,7 @@ This will launch an interactive menu allowing you to:
 ### Unified Incident Pipeline
 - **Single hot path:** `handlers.handle_event()` → `IncidentPipeline.process()`
 - **8 playbooks** registered in `handlers.py`
-- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation. Lab Terraform creates DynamoDB `soar-pending-approvals` and sets `APPROVAL_STORE=dynamodb` on the responder Lambdas so pending records survive cold starts.
+- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify (includes anomaly score and MITRE TTPs), no auto-remediation. A Markdown incident report is written for `REQUIRE_APPROVAL` and `AUTO_ISOLATE`. Lab Terraform creates DynamoDB `soar-pending-approvals` and sets `APPROVAL_STORE=dynamodb` on the responder Lambdas so pending records survive cold starts.
 - **Legacy:** Step Functions modules in Terraform (if enabled) do not contain playbook logic
 
 ### Message Queue Layer (SQS)

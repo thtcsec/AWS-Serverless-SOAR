@@ -5,6 +5,12 @@ All notable changes to **AWS Serverless SOAR** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] — 2026-09-28
+
+### Added
+- Markdown incident report on `REQUIRE_APPROVAL` and `AUTO_ISOLATE` (`report_id`, `report_path`)
+- Slack approval payload includes anomaly score and MITRE TTPs
+
 ## [2.1.3] — 2026-09-27
 
 ### Added

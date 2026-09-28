@@ -33,12 +33,16 @@ def test_request_approval_persists_and_notifies(mock_slack_cls):
     mock_slack_cls.return_value.send_interactive_approval.return_value = {"notification_sent": True}
 
     inc = _incident()
+    inc.anomaly_score = -0.8
+    inc.threat_classification = {"mitre_ttps": ["T1078"]}
     pipe._request_approval(inc, {"summary": "needs review", "decision": "REQUIRE_APPROVAL"})
 
     pending = store.get("inc-approve-1")
     assert pending is not None
     assert pending["status"] == "pending"
-    mock_slack_cls.return_value.send_interactive_approval.assert_called_once()
+    payload = mock_slack_cls.return_value.send_interactive_approval.call_args[0][0]
+    assert payload["anomaly_score"] == -0.8
+    assert payload["mitre_ttps"] == ["T1078"]
 
 
 def test_resume_reject():

@@ -423,6 +423,9 @@ class SlackNotifier:
         resource = approval_data.get("resource") or "N/A"
         risk_score = approval_data.get("risk_score", "N/A")
         severity = approval_data.get("severity") or "MEDIUM"
+        anomaly_score = approval_data.get("anomaly_score", "N/A")
+        ttps = approval_data.get("mitre_ttps") or []
+        ttp_text = ", ".join(str(item) for item in list(ttps)[:5]) or "n/a"
         resume_hint = f'Or invoke SOAR with `{{"approval_action":"approve","incident_id":"{incident_id}"}}`'
 
         message = {
@@ -441,6 +444,8 @@ class SlackNotifier:
                         {"type": "mrkdwn", "text": f"*Severity*\n{severity}"},
                         {"type": "mrkdwn", "text": f"*Risk score*\n{risk_score}"},
                         {"type": "mrkdwn", "text": f"*Resource*\n`{resource}`"},
+                        {"type": "mrkdwn", "text": f"*Anomaly*\n{anomaly_score}"},
+                        {"type": "mrkdwn", "text": f"*MITRE*\n`{ttp_text}`"},
                     ],
                 },
                 {"type": "section", "text": {"type": "mrkdwn", "text": description}},

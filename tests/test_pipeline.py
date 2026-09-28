@@ -88,6 +88,7 @@ class TestIncidentPipeline:
 
         assert result["statusCode"] == 200
         assert result["body"]["status"] == "pending_approval"
+        assert str(result["body"]["report_id"]).startswith("IR-")
         mock_dispatch.assert_not_called()
 
     @patch("src.core.pipeline.emit_metric")
