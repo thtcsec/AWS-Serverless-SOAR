@@ -27,10 +27,10 @@ def lambda_handler(event, context):
         records = event.get("Records", [])
         logger.info("Processing %s SQS messages via unified pipeline", len(records))
 
-        dlq_url = os.environ.get("DLQ_URL")
         processed_messages = 0
         failed_messages = 0
         pipeline_results: list[dict[str, Any]] = []
+        batch_failures: list[dict[str, str]] = []
 
         for record in records:
             message_id = record.get("messageId", "unknown")
@@ -41,9 +41,12 @@ def lambda_handler(event, context):
                 if not event_data:
                     logger.warning("Unable to map message %s to pipeline event", message_id)
                     failed_messages += 1
+                    batch_failures.append({"itemIdentifier": message_id})
                     continue
 
                 result = handle_event(event_data)
+                if isinstance(result, dict) and result.get("statusCode", 200) >= 400:
+                    raise RuntimeError("Incident pipeline returned an error")
                 pipeline_results.append(
                     {
                         "message_id": message_id,
@@ -57,13 +60,10 @@ def lambda_handler(event, context):
             except Exception as exc:
                 logger.error("Error processing message %s: %s", message_id, exc)
                 failed_messages += 1
-                if dlq_url:
-                    try:
-                        send_to_dlq(record, dlq_url)
-                    except Exception as dlq_error:
-                        logger.error("Failed to send message to DLQ: %s", dlq_error)
+                batch_failures.append({"itemIdentifier": message_id})
 
         response = {
+            "batchItemFailures": batch_failures,
             "processed_messages": processed_messages,
             "failed_messages": failed_messages,
             "total_messages": len(records),

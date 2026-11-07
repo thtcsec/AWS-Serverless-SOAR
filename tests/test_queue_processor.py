@@ -5,6 +5,32 @@ from unittest.mock import MagicMock, patch
 from src.queue_processor import _to_pipeline_event, lambda_handler
 
 
+@patch("src.queue_processor.handle_event")
+def test_batch_retries_only_failed_records(mock_handle, monkeypatch):
+    monkeypatch.delenv("DLQ_URL", raising=False)
+    mock_handle.side_effect = [
+        {"statusCode": 200},
+        {"statusCode": 500},
+        RuntimeError("transient"),
+    ]
+    records = [
+        {"messageId": name, "body": '{"source":"aws.guardduty","detail":{"id":"finding"}}'}
+        for name in ("success", "failed", "exception")
+    ]
+    result = lambda_handler({"Records": records}, MagicMock())
+    assert result["batchItemFailures"] == [
+        {"itemIdentifier": "failed"},
+        {"itemIdentifier": "exception"},
+    ]
+    assert result["processed_messages"] == 1
+    assert result["failed_messages"] == 2
+
+
+def test_invalid_record_is_reported_for_retry():
+    result = lambda_handler({"Records": [{"messageId": "invalid", "body": "{}"}]}, MagicMock())
+    assert result["batchItemFailures"] == [{"itemIdentifier": "invalid"}]
+
+
 def test_to_pipeline_event_passthrough_eventbridge():
     event = {"source": "aws.guardduty", "detail": {"id": "finding-1"}}
     assert _to_pipeline_event(event) is event

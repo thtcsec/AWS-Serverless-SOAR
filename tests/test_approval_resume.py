@@ -10,6 +10,74 @@ from src.core.pipeline import IncidentPipeline
 from src.playbooks.registry import PlaybookRegistry
 
 
+def _pending_pipeline():
+    store = MemoryApprovalStore()
+    incident = _incident()
+    store.put(
+        build_pending_record(
+            incident_id=incident.incident_id,
+            raw_event=incident.raw_event,
+            incident_snapshot=incident.model_dump(exclude={"raw_event"}),
+            score_result={},
+        )
+    )
+    return IncidentPipeline(registry=PlaybookRegistry(), approval_store=store), store, incident.incident_id
+
+
+def test_concurrent_approvals_only_dispatch_once():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    pipe, store, incident_id = _pending_pipeline()
+    started, release = Event(), Event()
+
+    def execute(_):
+        started.set()
+        assert release.wait(5)
+        return {"statusCode": 200, "body": {"status": "executed"}}
+
+    with patch.object(pipe, "_execute_playbook", side_effect=execute) as dispatch:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(pipe.resume_approval, incident_id=incident_id, action="approve")
+            try:
+                assert started.wait(5)
+                second = pipe.resume_approval(incident_id=incident_id, action="approve")
+                assert second["statusCode"] == 409
+            finally:
+                release.set()
+            assert first.result()["statusCode"] == 200
+        dispatch.assert_called_once()
+    assert store.get(incident_id)["status"] == "executed"
+
+
+def test_failed_playbook_is_not_marked_executed():
+    pipe, store, incident_id = _pending_pipeline()
+    with patch.object(pipe._registry, "dispatch", return_value={"status": "failed"}):
+        result = pipe.resume_approval(incident_id=incident_id, action="approve")
+    assert result["statusCode"] == 500
+    assert store.get(incident_id)["status"] == "failed"
+
+
+def test_playbook_exception_records_failed_state():
+    import pytest
+
+    pipe, store, incident_id = _pending_pipeline()
+    with (
+        patch.object(pipe._registry, "dispatch", side_effect=RuntimeError("provider unavailable")),
+        pytest.raises(RuntimeError, match="provider unavailable"),
+    ):
+        pipe.resume_approval(incident_id=incident_id, action="approve")
+    assert store.get(incident_id)["status"] == "failed"
+
+
+def test_approve_reject_race_uses_atomic_transition():
+    pipe, store, incident_id = _pending_pipeline()
+    with patch.object(store, "transition", return_value=False), patch.object(pipe._registry, "dispatch") as dispatch:
+        assert pipe.resume_approval(incident_id=incident_id, action="approve")["statusCode"] == 409
+        assert pipe.resume_approval(incident_id=incident_id, action="reject")["statusCode"] == 409
+        dispatch.assert_not_called()
+
+
 def _incident() -> UnifiedIncident:
     return UnifiedIncident(
         incident_id="inc-approve-1",

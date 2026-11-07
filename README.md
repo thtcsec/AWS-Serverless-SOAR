@@ -341,3 +341,27 @@ Since this platform is built entirely on native Serverless architecture, the cos
 ## 📄 License
 
 This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+
+## Local Validation and Approval Recovery
+
+Run all Python CI checks with the root virtualenv:
+
+```powershell
+.\scripts\check.ps1
+# If Nickel is unavailable locally (CI still validates the policy):
+.\scripts\check.ps1 --skip-nickel
+```
+
+Install developer tools with `python -m pip install -r requirements.txt ruff pip-audit`.
+The checker uses the same interpreter for every gate and stops on the first failure.
+It runs Ruff lint and format, Bandit, mypy, pytest with coverage, policy export validation,
+and dependency audit. Bash users can run `bash scripts/check.sh` with the same flags.
+
+Approval state changes are atomic. Only a pending approval can be claimed for execution;
+concurrent or repeated approval requests return HTTP 409. A playbook failure is recorded
+as `failed`, not `executed`. Inspect the audit trail and resource state before creating
+a new approval after failure; failed or interrupted executions are never replayed automatically.
+
+Transport adapters propagate pipeline errors to their queue triggers. Enable retries and
+dead-letter handling in the deployed trigger. AWS SQS mappings use `ReportBatchItemFailures`
+to retry only failed records. Apply the Terraform mapping update when deploying this version.

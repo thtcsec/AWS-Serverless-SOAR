@@ -157,7 +157,7 @@ class IncidentPipeline:
         if not pending:
             return {"statusCode": 404, "body": {"error": "pending_approval_not_found", "incident_id": incident_id}}
 
-        if pending.get("status") not in {"pending", "approved"}:
+        if pending.get("status") != "pending":
             return {
                 "statusCode": 409,
                 "body": {
@@ -169,7 +169,8 @@ class IncidentPipeline:
 
         action = action.lower()
         if action == "reject":
-            self._approvals.update_status(incident_id, "rejected", actor=actor)
+            if not self._approvals.transition(incident_id, "pending", "rejected", actor=actor):
+                return {"statusCode": 409, "body": {"error": "approval_already_claimed"}}
             self._audit.log(
                 AuditAction.APPROVAL_DENIED,
                 resource_id=incident_id,
@@ -183,7 +184,8 @@ class IncidentPipeline:
         if action != "approve":
             return {"statusCode": 400, "body": {"error": "action must be approve|reject"}}
 
-        self._approvals.update_status(incident_id, "approved", actor=actor)
+        if not self._approvals.transition(incident_id, "pending", "executing", actor=actor):
+            return {"statusCode": 409, "body": {"error": "approval_already_claimed"}}
         self._audit.log(
             AuditAction.APPROVAL_GRANTED,
             resource_id=incident_id,
@@ -192,8 +194,13 @@ class IncidentPipeline:
 
         raw_event = dict(pending.get("raw_event") or {})
         snap = pending.get("incident_snapshot") or {}
-        incident = UnifiedIncident.model_validate(snap) if snap else EventNormalizer.normalize(raw_event)
+        try:
+            incident = UnifiedIncident.model_validate(snap) if snap else EventNormalizer.normalize(raw_event)
+        except Exception:
+            self._approvals.transition(incident_id, "executing", "failed", actor=actor)
+            raise
         if incident is None:
+            self._approvals.transition(incident_id, "executing", "failed", actor=actor)
             return {"statusCode": 422, "body": {"error": "unable_to_rebuild_incident", "incident_id": incident_id}}
 
         incident.raw_event = raw_event or incident.raw_event
@@ -201,8 +208,15 @@ class IncidentPipeline:
         incident.pipeline_options = dict(incident.pipeline_options or {})
         incident.pipeline_options["approved_by"] = actor
 
-        result = self._execute_playbook(incident)
-        self._approvals.update_status(incident_id, "executed", actor=actor)
+        try:
+            result = self._execute_playbook(incident)
+        except Exception:
+            self._approvals.transition(incident_id, "executing", "failed", actor=actor)
+            raise
+        body = result.get("body", {})
+        completed = result["statusCode"] < 400 and body.get("status") not in {"failed", "no_playbook"}
+        final_status = "executed" if completed else "failed"
+        self._approvals.transition(incident_id, "executing", final_status, actor=actor)
         return result
 
     def _execute_playbook(self, incident: UnifiedIncident) -> dict[str, Any]:
@@ -229,7 +243,7 @@ class IncidentPipeline:
         if isinstance(result, dict):
             body = {**result, **{k: v for k, v in enrichment.items() if k not in result}}
             self._archive_audit()
-            return {"statusCode": 200, "body": self._attach_report(incident, body)}
+            return {"statusCode": 200 if success else 500, "body": self._attach_report(incident, body)}
 
         if result:
             self._archive_audit()
