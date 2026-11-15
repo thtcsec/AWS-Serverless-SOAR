@@ -24,6 +24,63 @@ def _pending_pipeline():
     return IncidentPipeline(registry=PlaybookRegistry(), approval_store=store), store, incident.incident_id
 
 
+@patch("src.core.pipeline.SlackNotifier")
+def test_redelivery_does_not_reset_or_notify_pending_approval(mock_slack):
+    pipe, store, incident_id = _pending_pipeline()
+    incident = _incident()
+    pipe._policy = MagicMock()
+    pipe._policy.evaluate.return_value = {}
+    incident.decision = "REQUIRE_APPROVAL"
+    event = {"id": "stable-delivery"}
+    with patch("src.core.pipeline.EventNormalizer.normalize", return_value=incident):
+        assert pipe.process(event)["body"]["status"] == "pending_approval"
+        original = store.get(incident_id)
+        assert pipe.process(event)["body"]["status"] == "duplicate"
+    assert store.get(incident_id) == original
+    mock_slack.return_value.send_interactive_approval.assert_called_once()
+
+
+def test_expired_approval_never_dispatches():
+    import time
+
+    pipe, store, incident_id = _pending_pipeline()
+    record = store.get(incident_id)
+    record["expires_at"] = int(time.time()) - 1
+    store.put(record)
+    with patch.object(pipe._registry, "dispatch") as dispatch:
+        assert pipe.resume_approval(incident_id=incident_id, action="approve")["statusCode"] == 409
+        dispatch.assert_not_called()
+    assert store.get(incident_id)["status"] == "expired"
+
+
+def test_expiry_is_checked_atomically_when_claiming():
+    import time
+
+    pipe, store, incident_id = _pending_pipeline()
+    record = store.get(incident_id)
+    record["expires_at"] = int(time.time()) - 1
+    store.put(record)
+    assert not store.transition(incident_id, "pending", "executing", require_unexpired=True)
+    assert store.get(incident_id)["status"] == "pending"
+
+
+def test_status_reports_stalled_execution_without_replaying():
+    from datetime import UTC, datetime, timedelta
+
+    pipe, store, incident_id = _pending_pipeline()
+    record = store.get(incident_id)
+    record["status"] = "executing"
+    record["updated_at"] = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    store.put(record)
+    with patch.object(pipe._registry, "dispatch") as dispatch:
+        result = pipe.process({"approval_action": "status", "incident_id": incident_id})
+        assert result["body"]["status"] == "stalled"
+        assert result["body"]["requires_review"] is True
+        assert pipe.resume_approval(incident_id=incident_id, action="approve")["statusCode"] == 409
+        dispatch.assert_not_called()
+    assert store.get(incident_id)["status"] == "executing"
+
+
 def test_concurrent_approvals_only_dispatch_once():
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event

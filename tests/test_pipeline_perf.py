@@ -28,7 +28,9 @@ class TestPipelinePerf:
         times_ms: list[float] = []
         # Warmup
         pipeline.process(event)
-        for _ in range(_RUNS):
+        for index in range(_RUNS):
+            # Measure full processing of distinct deliveries, not the duplicate fast path.
+            event["id"] = f"perf-{index}"
             t0 = time.perf_counter()
             result = pipeline.process(event)
             times_ms.append((time.perf_counter() - t0) * 1000)

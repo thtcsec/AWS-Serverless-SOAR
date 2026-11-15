@@ -23,3 +23,10 @@ def test_dynamo_rejects_repeated_claims(monkeypatch):
     assert results.count(True) == 1
     assert store.get("one")["status"] == "executing"
     assert store.transition("missing", "pending", "executing") is False
+    assert store.create_once({"incident_id": "event:one", "status": "processing"}) is True
+    assert store.create_once({"incident_id": "event:one", "status": "completed"}) is False
+    assert store.get("event:one")["status"] == "processing"
+    store.put({"incident_id": "expired", "status": "pending", "expires_at": 1})
+    assert not store.transition("expired", "pending", "executing", require_unexpired=True)
+    store.put({"incident_id": "fresh", "status": "pending", "expires_at": 9999999999})
+    assert store.transition("fresh", "pending", "executing", require_unexpired=True)

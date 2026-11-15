@@ -344,6 +344,9 @@ This project is licensed under the **Apache License 2.0**. See the [LICENSE](LIC
 
 ## Local Validation and Approval Recovery
 
+See [event deduplication and approval lifecycle](docs/INCIDENT_LIFECYCLE.md) for
+retry behavior, approval deadlines, stalled execution status, and operational recovery.
+
 Run all Python CI checks with the root virtualenv:
 
 ```powershell
