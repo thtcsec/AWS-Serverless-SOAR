@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from threading import RLock
@@ -33,37 +34,57 @@ class ApprovalStore:
     def put(self, record: dict[str, Any]) -> None:
         raise NotImplementedError
 
+    def create_once(self, record: dict[str, Any]) -> bool:
+        """Create a record only if its key has never been claimed."""
+        raise NotImplementedError
+
     def get(self, incident_id: str) -> dict[str, Any] | None:
         raise NotImplementedError
 
     def update_status(self, incident_id: str, status: str, *, actor: str = "") -> dict[str, Any] | None:
         raise NotImplementedError
 
-    def transition(self, incident_id: str, expected: str, status: str, *, actor: str = "") -> bool:
+    def transition(
+        self, incident_id: str, expected: str, status: str, *, actor: str = "", require_unexpired: bool = False
+    ) -> bool:
         """Atomically change state only if the caller still owns the expected state."""
         raise NotImplementedError
 
 
 class MemoryApprovalStore(ApprovalStore):
-    def transition(self, incident_id: str, expected: str, status: str, *, actor: str = "") -> bool:
+    def __init__(self, records: dict[str, dict[str, Any]] | None = None) -> None:
+        self._records = _MEMORY if records is None else records
+
+    def create_once(self, record: dict[str, Any]) -> bool:
         with _LOCK:
-            record = _MEMORY.get(incident_id)
+            if record["incident_id"] in self._records:
+                return False
+            self.put(record)
+            return True
+
+    def transition(
+        self, incident_id: str, expected: str, status: str, *, actor: str = "", require_unexpired: bool = False
+    ) -> bool:
+        with _LOCK:
+            record = self._records.get(incident_id)
             if not record or record.get("status") != expected:
+                return False
+            if require_unexpired and record.get("expires_at", 0) <= time.time():
                 return False
             self.update_status(incident_id, status, actor=actor)
             return True
 
     def put(self, record: dict[str, Any]) -> None:
         with _LOCK:
-            _MEMORY[record["incident_id"]] = dict(record)
+            self._records[record["incident_id"]] = dict(record)
 
     def get(self, incident_id: str) -> dict[str, Any] | None:
         with _LOCK:
-            rec = _MEMORY.get(incident_id)
+            rec = self._records.get(incident_id)
             return dict(rec) if rec else None
 
     def update_status(self, incident_id: str, status: str, *, actor: str = "") -> dict[str, Any] | None:
-        rec = _MEMORY.get(incident_id)
+        rec = self._records.get(incident_id)
         if not rec:
             return None
         rec["status"] = status
@@ -74,21 +95,37 @@ class MemoryApprovalStore(ApprovalStore):
 
 
 class DynamoApprovalStore(ApprovalStore):
-    def transition(self, incident_id: str, expected: str, status: str, *, actor: str = "") -> bool:
+    def create_once(self, record: dict[str, Any]) -> bool:
         from botocore.exceptions import ClientError
 
         try:
+            self._table.put_item(
+                Item=json.loads(json.dumps(record), parse_float=Decimal),
+                ConditionExpression="attribute_not_exists(incident_id)",
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
+
+    def transition(
+        self, incident_id: str, expected: str, status: str, *, actor: str = "", require_unexpired: bool = False
+    ) -> bool:
+        from botocore.exceptions import ClientError
+
+        condition = "#s = :expected"
+        values: dict[str, Any] = {":expected": expected, ":status": status, ":now": _now(), ":actor": actor}
+        if require_unexpired:
+            condition += " AND expires_at > :epoch"
+            values[":epoch"] = Decimal(str(time.time()))
+        try:
             self._table.update_item(
                 Key={"incident_id": incident_id},
-                ConditionExpression="#s = :expected",
+                ConditionExpression=condition,
                 UpdateExpression="SET #s = :status, updated_at = :now, actor = :actor",
                 ExpressionAttributeNames={"#s": "status"},
-                ExpressionAttributeValues={
-                    ":expected": expected,
-                    ":status": status,
-                    ":now": _now(),
-                    ":actor": actor,
-                },
+                ExpressionAttributeValues=values,
             )
         except ClientError as exc:
             if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
@@ -107,7 +144,7 @@ class DynamoApprovalStore(ApprovalStore):
         self._table.put_item(Item=item)
 
     def get(self, incident_id: str) -> dict[str, Any] | None:
-        resp = self._table.get_item(Key={"incident_id": incident_id})
+        resp = self._table.get_item(Key={"incident_id": incident_id}, ConsistentRead=True)
         item = resp.get("Item")
         return json.loads(json.dumps(item, default=float)) if item else None
 
@@ -129,7 +166,18 @@ class DynamoApprovalStore(ApprovalStore):
 
 
 class FirestoreApprovalStore(ApprovalStore):
-    def transition(self, incident_id: str, expected: str, status: str, *, actor: str = "") -> bool:
+    def create_once(self, record: dict[str, Any]) -> bool:
+        from google.api_core.exceptions import AlreadyExists
+
+        try:
+            self._col.document(record["incident_id"]).create(record)
+        except AlreadyExists:
+            return False
+        return True
+
+    def transition(
+        self, incident_id: str, expected: str, status: str, *, actor: str = "", require_unexpired: bool = False
+    ) -> bool:
         import google.cloud.firestore as firestore
 
         ref = self._col.document(incident_id)
@@ -138,6 +186,8 @@ class FirestoreApprovalStore(ApprovalStore):
         def change(transaction):
             snapshot = ref.get(transaction=transaction)
             if not snapshot.exists or snapshot.to_dict().get("status") != expected:
+                return False
+            if require_unexpired and snapshot.to_dict().get("expires_at", 0) <= time.time():
                 return False
             transaction.update(ref, {"status": status, "updated_at": _now(), "actor": actor})
             return True
@@ -198,4 +248,12 @@ def build_pending_record(
         "created_at": now,
         "updated_at": now,
         "actor": "",
+        "expires_at": int(time.time()) + positive_seconds("APPROVAL_TTL_SECONDS", 3600),
     }
+
+
+def positive_seconds(name: str, default: int) -> int:
+    value = int(os.environ.get(name, str(default)))
+    if value <= 0:
+        raise ValueError(f"{name} must be positive")
+    return value
